@@ -4,7 +4,7 @@ class UserModel {
   final String correo;
   final String? fotoPerfil;
   final int rachaActual;
-  final int? clasificacionId;
+  final int clasificacionId; // Cambiado: ahora siempre es int (no nullable)
 
   UserModel({
     required this.id,
@@ -12,17 +12,31 @@ class UserModel {
     required this.correo,
     this.fotoPerfil,
     required this.rachaActual,
-    this.clasificacionId,
+    required this.clasificacionId, // Cambiado: ahora es required
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    // El JSON viene con estructura {"status": "success", "user": {...}}
+    final userData = json['user'] ?? json; // Maneja ambos casos
+    
     return UserModel(
-      id: json['id'],
-      nombre: json['nombre'],
-      correo: json['correo'],
-      fotoPerfil: json['foto_perfil'],
-      rachaActual: json['racha_actual'],
-      clasificacionId: json['clasificacion_id'],
+      id: userData['id'],
+      nombre: userData['nombre'],
+      correo: userData['correo'],
+      fotoPerfil: userData['foto_perfil'],
+      rachaActual: userData['racha_actual'] ?? 0,
+      clasificacionId: userData['clasificacion_id'] ?? 0, // Ahora siempre será int
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'nombre': nombre,
+      'correo': correo,
+      'foto_perfil': fotoPerfil,
+      'racha_actual': rachaActual,
+      'clasificacion_id': clasificacionId,
+    };
   }
 }

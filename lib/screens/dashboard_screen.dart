@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
+import '../widgets/bottom_navigation_widget.dart';
+import '../screens/maps_screen.dart';
+import '../screens/community_screen.dart';
+import '../screens/profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -9,42 +12,31 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final AuthService _authService = AuthService();
+  int _currentIndex = 0;
 
-  Future<void> _handleLogout() async {
-    await _authService.logout();
-    if (mounted) {
-      Navigator.pushReplacementNamed(context, '/login');
-    }
+  // Lista de pantallas para cada pestaña
+  final List<Widget> _screens = [
+    const MapsScreen(),
+    const CommunityScreen(),
+    const ProfileScreen(),
+  ];
+
+  void _onTabTapped(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _handleLogout,
-          ),
-        ],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
       ),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '¡Bienvenido a Mapas Rutas!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 20),
-            Text(
-              'Login exitoso con Google',
-              style: TextStyle(fontSize: 16),
-            ),
-          ],
-        ),
+      bottomNavigationBar: BottomNavigationWidget(
+        currentIndex: _currentIndex,
+        onTap: _onTabTapped,
       ),
     );
   }

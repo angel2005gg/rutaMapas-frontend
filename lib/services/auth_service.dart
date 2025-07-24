@@ -57,6 +57,34 @@ class AuthService {
     }
   }
 
+  // Nuevo método para obtener datos del usuario actual
+  Future<Map<String, dynamic>?> getCurrentUser() async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) return null;
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/user'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('Get user response status: ${response.statusCode}');
+      print('Get user response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        return null;
+      }
+    } catch (e) {
+      print('Error en getCurrentUser: $e');
+      return null;
+    }
+  }
+
   Future<void> logout() async {
     await _googleSignIn.signOut();
     await storage.delete(key: 'token');
