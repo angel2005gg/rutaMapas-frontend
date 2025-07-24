@@ -45,5 +45,16 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.example.rutaMapFrontend</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.842914281578-tnbt382ocsb7vnknb8k2hdmpkd2rigj7</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

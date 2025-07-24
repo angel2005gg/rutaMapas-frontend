@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "842914281578",
+    "project_id": "mapasmotos-466716",
+    "storage_bucket": "mapasmotos-466716.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:842914281578:android:a454291279d01ed4677213",
+        "android_client_info": {
+          "package_name": "com.example.ruta_map_frontend"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "842914281578-q0d14usu0s6j9cca3uohvo9c6smgp1ir.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ruta_map_frontend",
+            "certificate_hash": "c8de4ed69a14832344b22ad601fdaa3f1769b3cc"
+          }
+        },
+        {
+          "client_id": "842914281578-iatsucr3qaq5sd06r242e7v8sadq222q.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCP1xS8HLdxQe-a1KeuXGQzaVIqoQvKmYo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "842914281578-iatsucr3qaq5sd06r242e7v8sadq222q.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "842914281578-tnbt382ocsb7vnknb8k2hdmpkd2rigj7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rutaMapFrontend"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
