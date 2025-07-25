@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../config/api_config.dart'; // ✅ IMPORTAR CONFIGURACIÓN
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -12,7 +13,9 @@ class AuthService {
     scopes: ['email', 'profile'],
   );
   final storage = const FlutterSecureStorage();
-  final String _baseUrl = 'http://192.168.0.128:8000/api';
+  
+  // ✅ USAR CONFIGURACIÓN CENTRAL
+  final String _baseUrl = ApiConfig.baseUrl;
 
   // MÉTODO EXISTENTE DE GOOGLE (NO CAMBIAR)
   Future<Map<String, dynamic>> signInWithGoogle() async {
@@ -26,7 +29,7 @@ class AuthService {
       print('Google User Email: ${googleUser.email}');
 
       final response = await http.post(
-        Uri.parse('$_baseUrl/auth/google'),
+        Uri.parse('${ApiConfig.authUrl}/google'), // ✅ USAR CONFIGURACIÓN
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'google_uid': googleUser.id,
@@ -61,7 +64,7 @@ class AuthService {
     try {
       // Primero intenta login directo
       final response = await http.post(
-        Uri.parse('$_baseUrl/auth/login'),
+        Uri.parse('${ApiConfig.authUrl}/login'), // ✅ USAR CONFIGURACIÓN
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'correo': email,
@@ -110,7 +113,7 @@ class AuthService {
   Future<Map<String, dynamic>> sendVerificationCode(String email, String password, [String? nombre]) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/auth/send-code'),
+        Uri.parse('${ApiConfig.authUrl}/send-code'), // ✅ USAR CONFIGURACIÓN
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'correo': email,
@@ -144,7 +147,7 @@ class AuthService {
   Future<Map<String, dynamic>> verifyCode(String email, String code) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/auth/verify-code'),
+        Uri.parse('${ApiConfig.authUrl}/verify-code'), // ✅ USAR CONFIGURACIÓN
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'correo': email,
@@ -176,7 +179,7 @@ class AuthService {
       if (token == null) return null;
 
       final response = await http.get(
-        Uri.parse('$_baseUrl/user'),
+        Uri.parse(ApiConfig.userUrl), // ✅ USAR CONFIGURACIÓN
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

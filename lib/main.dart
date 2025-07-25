@@ -5,6 +5,9 @@ import 'screens/dashboard_screen.dart';
 import 'screens/maps_screen.dart';
 import 'screens/community_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/comunidades/comunidades_screen.dart';
+import 'screens/comunidades/crear_comunidad_screen.dart';
+import 'screens/comunidades/unirse_comunidad_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -38,6 +41,9 @@ class MyApp extends StatelessWidget {
         '/maps': (context) => const MapsScreen(),
         '/community': (context) => const CommunityScreen(),
         '/profile': (context) => const ProfileScreen(),
+        '/comunidades': (context) => const ComunidadesScreen(),
+        '/crear-comunidad': (context) => const CrearComunidadScreen(),
+        '/unirse-comunidad': (context) => const UnirseComunidadScreen(),
       },
     );
   }
