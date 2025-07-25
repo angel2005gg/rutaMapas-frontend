@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
+import 'screens/verify_code_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/maps_screen.dart';
 import 'screens/community_screen.dart';
@@ -32,6 +33,7 @@ class MyApp extends StatelessWidget {
       initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginScreen(),
+        '/verify-code': (context) => const VerifyCodeScreen(),
         '/dashboard': (context) => const DashboardScreen(),
         '/maps': (context) => const MapsScreen(),
         '/community': (context) => const CommunityScreen(),

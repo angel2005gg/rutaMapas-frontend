@@ -6,16 +6,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    // Para iOS usa el iOS Client ID, para Android usa el Web Client ID
     clientId: Platform.isIOS 
-        ? '842914281578-tnbt382ocsb7vnknb8k2hdmpkd2rigj7.apps.googleusercontent.com' // iOS Client ID
-        : '842914281578-iatsucr3qaq5sd06r242e7v8sadq222q.apps.googleusercontent.com', // Android Web Client ID
+        ? '842914281578-tnbt382ocsb7vnknb8k2hdmpkd2rigj7.apps.googleusercontent.com'
+        : '842914281578-iatsucr3qaq5sd06r242e7v8sadq222q.apps.googleusercontent.com',
     scopes: ['email', 'profile'],
   );
   final storage = const FlutterSecureStorage();
-  // Cambia por tu IP real
   final String _baseUrl = 'http://192.168.0.128:8000/api';
 
+  // MÉTODO EXISTENTE DE GOOGLE (NO CAMBIAR)
   Future<Map<String, dynamic>> signInWithGoogle() async {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
@@ -57,7 +56,120 @@ class AuthService {
     }
   }
 
-  // Nuevo método para obtener datos del usuario actual
+  // ✅ ARREGLADO: Login inteligente con manejo correcto de errores
+  Future<Map<String, dynamic>> smartLogin(String email, String password) async {
+    try {
+      // Primero intenta login directo
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'correo': email,
+          'password': password,
+        }),
+      );
+
+      print('Smart login response status: ${response.statusCode}');
+      print('Smart login response body: ${response.body}');
+
+      final responseData = json.decode(response.body);
+      
+      if (response.statusCode == 200) {
+        // Login exitoso, guardar token
+        await storage.write(key: 'token', value: responseData['token']);
+        return {
+          'status': 'success',
+          'type': 'direct_login',
+          'message': 'Login exitoso',
+          'user': responseData['user'],
+          'token': responseData['token']
+        };
+      } else if (response.statusCode == 404) {
+        // Usuario NO existe - enviar código para registro
+        return await sendVerificationCode(email, password);
+      } else if (response.statusCode == 401) {
+        // ✅ ARREGLADO: Usuario existe pero contraseña incorrecta
+        return {
+          'status': 'error',
+          'message': 'Contraseña incorrecta. Verifica tus datos.',
+        };
+      } else {
+        // Otros errores del servidor
+        return {
+          'status': 'error',
+          'message': responseData['message'] ?? 'Error en el servidor',
+        };
+      }
+    } catch (e) {
+      print('Error en smartLogin: $e');
+      return {'status': 'error', 'message': 'Error de conexión: ${e.toString()}'};
+    }
+  }
+
+  // MÉTODO EXISTENTE: Enviar código de verificación por email
+  Future<Map<String, dynamic>> sendVerificationCode(String email, String password, [String? nombre]) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/send-code'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'correo': email,
+          'password': password,
+          'nombre': nombre ?? 'Usuario',
+        }),
+      );
+
+      print('Send code response status: ${response.statusCode}');
+      print('Send code response body: ${response.body}');
+
+      final responseData = json.decode(response.body);
+      
+      if (response.statusCode == 200) {
+        return {
+          'status': 'success',
+          'type': 'verification_needed',
+          'message': responseData['message'],
+          'debug': responseData['debug'] ?? null,
+        };
+      }
+      
+      return responseData;
+    } catch (e) {
+      print('Error en sendVerificationCode: $e');
+      return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
+  // MÉTODO EXISTENTE: Verificar código
+  Future<Map<String, dynamic>> verifyCode(String email, String code) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/verify-code'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'correo': email,
+          'codigo': code,
+        }),
+      );
+
+      print('Verify code response status: ${response.statusCode}');
+      print('Verify code response body: ${response.body}');
+
+      final responseData = json.decode(response.body);
+      
+      if (response.statusCode == 200) {
+        await storage.write(key: 'token', value: responseData['token']);
+        return responseData;
+      }
+      
+      return responseData;
+    } catch (e) {
+      print('Error en verifyCode: $e');
+      return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
+  // MÉTODO EXISTENTE (NO CAMBIAR)
   Future<Map<String, dynamic>?> getCurrentUser() async {
     try {
       final token = await storage.read(key: 'token');
@@ -85,6 +197,7 @@ class AuthService {
     }
   }
 
+  // MÉTODO EXISTENTE (NO CAMBIAR)
   Future<void> logout() async {
     await _googleSignIn.signOut();
     await storage.delete(key: 'token');

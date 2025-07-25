@@ -13,6 +13,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   UserModel? _user;
   bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -21,26 +22,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final userData = await _authService.getCurrentUser();
       
       if (userData != null) {
+        print('Datos recibidos: $userData'); // Para debug
+        final user = UserModel.fromJson(userData);
         setState(() {
-          _user = UserModel.fromJson(userData);
+          _user = user;
           _isLoading = false;
         });
       } else {
         setState(() {
+          _errorMessage = 'No se pudieron obtener los datos del usuario';
           _isLoading = false;
         });
-        // Si no se pueden cargar los datos, redirigir al login
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/login');
-        }
       }
     } catch (e) {
       print('Error al cargar datos del usuario: $e');
       setState(() {
+        _errorMessage = 'Error al cargar datos: ${e.toString()}';
         _isLoading = false;
       });
     }
@@ -77,6 +83,97 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // ✅ Widget para avatar que maneja correctamente usuarios sin foto
+  Widget _buildProfileAvatar() {
+    // Verificar si tiene foto real de Google
+    if (_user!.fotoPerfil != null && 
+        _user!.fotoPerfil!.isNotEmpty && 
+        !_user!.fotoPerfil!.contains('gravatar')) { // ✅ Excluir Gravatar
+      
+      return Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFF1565C0), width: 3),
+        ),
+        child: ClipOval(
+          child: Image.network(
+            _user!.fotoPerfil!,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFF1565C0),
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              // Si hay error cargando la imagen, mostrar avatar por defecto
+              return _buildDefaultAvatar();
+            },
+          ),
+        ),
+      );
+    } else {
+      // Usuario sin foto real (registrado con email)
+      return _buildDefaultAvatar();
+    }
+  }
+
+  // ✅ Avatar por defecto con iniciales mejorado
+  Widget _buildDefaultAvatar() {
+    return Container(
+      width: 120,
+      height: 120,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFF1565C0), width: 3),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF1565C0),
+            const Color(0xFF1976D2),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          _getInitials(),
+          style: const TextStyle(
+            fontSize: 40,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ✅ Método para obtener iniciales
+  String _getInitials() {
+    if (_user?.nombre == null || _user!.nombre.isEmpty) return 'U';
+    
+    // Si es "Usuario" genérico, usar inicial del email
+    if (_user!.nombre.toLowerCase() == 'usuario') {
+      final emailParts = _user!.correo.split('@');
+      if (emailParts.isNotEmpty) {
+        return emailParts[0].substring(0, 1).toUpperCase();
+      }
+      return 'U';
+    }
+    
+    // Si tiene nombre real, usar iniciales normales
+    final palabras = _user!.nombre.trim().split(' ');
+    if (palabras.length >= 2) {
+      return '${palabras[0][0]}${palabras[1][0]}'.toUpperCase();
+    } else {
+      return palabras[0][0].toUpperCase();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -102,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    if (_user == null) {
+    if (_user == null || _errorMessage != null) {
       return Scaffold(
         body: Center(
           child: Column(
@@ -122,15 +219,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'No se pudieron cargar los datos del perfil',
-                style: TextStyle(
+              Text(
+                _errorMessage ?? 'No se pudieron cargar los datos del perfil',
+                style: const TextStyle(
                   color: Colors.grey,
                 ),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _loadUserData,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1565C0),
+                  foregroundColor: Colors.white,
+                ),
                 child: const Text('Reintentar'),
               ),
             ],
@@ -146,45 +248,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-              // Foto de perfil
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF1565C0), width: 3),
-                ),
-                child: ClipOval(
-                  child: _user!.fotoPerfil != null && _user!.fotoPerfil!.isNotEmpty
-                      ? Image.network(
-                          _user!.fotoPerfil!,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
-                              Icons.person,
-                              size: 60,
-                              color: Colors.grey,
-                            );
-                          },
-                        )
-                      : const Icon(
-                          Icons.person,
-                          size: 60,
-                          color: Colors.grey,
-                        ),
-                ),
-              ),
+              
+              // ✅ Avatar inteligente (foto real o iniciales)
+              _buildProfileAvatar(),
               const SizedBox(height: 20),
               
-              // Nombre
+              // Nombre inteligente
               Text(
-                _user!.nombre,
+                _user!.nombre == 'Usuario' ? 'Usuario Anónimo' : _user!.nombre,
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -203,6 +274,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 textAlign: TextAlign.center,
               ),
+              
               const SizedBox(height: 30),
               
               // Estadísticas
@@ -231,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           _buildStatItem(
                             'Clasificación',
-                            _user!.clasificacionId == 0 ? 'Sin clasificar' : '${_user!.clasificacionId}', // Cambiado
+                            _user!.clasificacionId == 0 ? 'Sin clasificar' : '${_user!.clasificacionId}',
                             Icons.emoji_events,
                             Colors.amber,
                           ),
