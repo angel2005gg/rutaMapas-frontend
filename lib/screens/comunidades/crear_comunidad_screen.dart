@@ -163,9 +163,10 @@ class _CrearComunidadScreenState extends State<CrearComunidadScreen> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Cerrar diálogo
-                Navigator.of(context).pop(); // Volver a comunidades
+                // ✅ ARREGLADO: Navegar al dashboard para ver la comunidad creada
+                Navigator.of(context).popUntil((route) => route.isFirst); 
               },
-              child: const Text('Entendido'),
+              child: const Text('¡Ver mi comunidad!'),
             ),
           ],
         );

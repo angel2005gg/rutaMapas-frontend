@@ -35,23 +35,19 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
     setState(() => _isLoading = true);
     
     try {
-      // ✅ LLAMADA REAL AL BACKEND
       final result = await _comunidadService.unirseAComunidad(
         codigoUnico: codigo,
       );
       
       if (mounted) {
         if (result['status'] == 'success') {
-          // ✅ DATOS REALES del backend
           final nombreComunidad = result['comunidad']['nombre'];
           final totalMiembros = result['comunidad']['total_miembros'];
           
           _showSuccessDialog(nombreComunidad, totalMiembros);
         } else {
-          // Manejar errores específicos
           String errorMessage = result['message'] ?? 'Error al unirse a la comunidad';
           
-          // Si hay errores de validación específicos
           if (result['errors'] != null) {
             final errors = result['errors'] as Map<String, dynamic>;
             final errorList = <String>[];
@@ -68,7 +64,7 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
           }
           
           _showError(errorMessage);
-          _codigoController.clear(); // Limpiar campo en caso de error
+          _codigoController.clear();
         }
       }
     } catch (e) {
@@ -119,7 +115,7 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                nombreComunidad, // ✅ NOMBRE REAL del backend
+                nombreComunidad,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -136,7 +132,7 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
                   border: Border.all(color: Colors.green[200]!),
                 ),
                 child: Text(
-                  '$totalMiembros miembros', // ✅ TOTAL REAL del backend
+                  '$totalMiembros miembros',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.green[700],
@@ -150,9 +146,11 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Cerrar diálogo
-                Navigator.of(context).pop(); // Volver a comunidades
+                // ✅ ARREGLADO: Navegar directamente al dashboard Y recargar
+                Navigator.of(context).popUntil((route) => route.isFirst); // Ir al dashboard
+                // Esto hará que CommunityScreen se recargue automáticamente
               },
-              child: const Text('¡Genial!'),
+              child: const Text('¡Ver mi comunidad!'),
             ),
           ],
         );
@@ -183,7 +181,6 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
             children: [
               const SizedBox(height: 20),
               
-              // Icono y título
               Container(
                 width: 100,
                 height: 100,
@@ -220,7 +217,6 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
               ),
               const SizedBox(height: 40),
               
-              // Card del formulario
               Card(
                 elevation: 2,
                 child: Padding(
@@ -237,7 +233,6 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
                       ),
                       const SizedBox(height: 16),
                       
-                      // Campo código
                       TextField(
                         controller: _codigoController,
                         textAlign: TextAlign.center,
@@ -273,7 +268,6 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
                           ),
                         ),
                         onChanged: (value) {
-                          // Convertir a mayúsculas automáticamente
                           if (value != value.toUpperCase()) {
                             _codigoController.text = value.toUpperCase();
                             _codigoController.selection = TextSelection.fromPosition(
@@ -284,7 +278,6 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
                       ),
                       const SizedBox(height: 24),
                       
-                      // Botón unirse
                       SizedBox(
                         width: double.infinity,
                         height: 56,
@@ -323,7 +316,6 @@ class _UnirseComunidadScreenState extends State<UnirseComunidadScreen> {
               ),
               const SizedBox(height: 30),
               
-              // Información adicional
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(

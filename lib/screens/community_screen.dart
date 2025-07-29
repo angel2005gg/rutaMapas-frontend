@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/comunidad_service.dart';
+import '../widgets/community_drawer.dart'; // ✅ NUEVO: Import del drawer
 
 class CommunityScreen extends StatefulWidget {
   const CommunityScreen({Key? key}) : super(key: key);
@@ -10,16 +11,32 @@ class CommunityScreen extends StatefulWidget {
 
 class _CommunityScreenState extends State<CommunityScreen> {
   final ComunidadService _comunidadService = ComunidadService();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); // ✅ NUEVO: Clave para el drawer
   
   bool _isLoading = true;
   List<Map<String, dynamic>> _misComunidades = [];
   Map<String, dynamic>? _comunidadActual;
-  List<Map<String, dynamic>> _rankingMiembros = [];
+
+  // ✅ NUEVO: Método para cambiar de comunidad desde el drawer
+  void _cambiarComunidad(Map<String, dynamic> comunidad) {
+    setState(() {
+      _comunidadActual = comunidad;
+    });
+    Navigator.pop(context); // Cerrar drawer
+  }
 
   @override
   void initState() {
     super.initState();
     _cargarMisComunidades();
+  }
+
+  @override
+  void didUpdateWidget(CommunityScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cargarMisComunidades();
+    });
   }
 
   Future<void> _cargarMisComunidades() async {
@@ -29,7 +46,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
       final result = await _comunidadService.obtenerMisComunidades();
       
       if (mounted) {
-        // ✅ ARREGLADO: Manejar correctamente la respuesta del backend reparado
         if (result['status'] == 'success' && result['comunidades'] != null) {
           final comunidades = List<Map<String, dynamic>>.from(result['comunidades']);
           
@@ -39,7 +55,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
             _misComunidades = comunidades;
             
             if (comunidades.isNotEmpty) {
-              // ✅ LÓGICA ARREGLADA: Buscar primero la comunidad donde es CREADOR/DUEÑO
+              // ✅ LÓGICA PRIORITARIA: Buscar primero la comunidad donde es CREADOR
               Map<String, dynamic>? comunidadCreador;
               Map<String, dynamic>? otraComunidad;
               
@@ -58,14 +74,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
               _comunidadActual = comunidadCreador ?? otraComunidad;
               
               print('Comunidad actual seleccionada: ${_comunidadActual?['nombre']}, es_creador: ${_comunidadActual?['es_creador']}'); // Debug
-              
-              if (_comunidadActual != null) {
-                _cargarDetallesComunidad(_comunidadActual!['id']);
-              }
             }
           });
         } else {
-          // ✅ Sin comunidades o error del servidor
           print('Sin comunidades o error: ${result.toString()}'); // Debug
           setState(() {
             _misComunidades = [];
@@ -81,7 +92,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
           _comunidadActual = null;
         });
         
-        // ✅ Mostrar error al usuario
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al cargar comunidades: ${e.toString()}'),
@@ -96,32 +106,128 @@ class _CommunityScreenState extends State<CommunityScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  Future<void> _cargarDetallesComunidad(int comunidadId) async {
-    try {
-      final result = await _comunidadService.obtenerDetallesComunidad(
-        comunidadId: comunidadId,
-      );
-      
-      print('Detalles comunidad response: $result'); // Debug
-      
-      if (mounted && result['status'] == 'success') {
-        setState(() {
-          _rankingMiembros = List<Map<String, dynamic>>.from(result['ranking'] ?? []);
-        });
-        print('Ranking cargado: ${_rankingMiembros.length} miembros'); // Debug
-      }
-    } catch (e) {
-      print('Error al cargar detalles de comunidad: $e');
-    }
+  void _abrirGestionComunidades() {
+    // ✅ NUEVA FUNCIÓN: Mostrar opciones para gestionar comunidades
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Indicador visual
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            const Text(
+              'Gestionar Comunidades',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1565C0),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Crear nueva comunidad
+            ListTile(
+              leading: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1565C0).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.add_circle_outline,
+                  color: Color(0xFF1565C0),
+                ),
+              ),
+              title: const Text(
+                'Crear Nueva Comunidad',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text('Inicia tu propia comunidad'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/crear-comunidad').then((_) {
+                  _cargarMisComunidades();
+                });
+              },
+            ),
+            
+            // Unirse a comunidad
+            ListTile(
+              leading: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.group_add,
+                  color: Colors.green,
+                ),
+              ),
+              title: const Text(
+                'Unirse a Comunidad',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text('Únete con un código de invitación'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/unirse-comunidad').then((_) {
+                  _cargarMisComunidades();
+                });
+              },
+            ),
+            
+            // Ver todas mis comunidades (si tiene múltiples)
+            if (_misComunidades.length > 1)
+              ListTile(
+                leading: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.groups,
+                    color: Colors.orange,
+                  ),
+                ),
+                title: const Text(
+                  'Mis Comunidades',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text('Tienes ${_misComunidades.length} comunidades'),
+                onTap: () {
+                  Navigator.pop(context);
+                  // Aquí podrías navegar a una pantalla con todas las comunidades
+                },
+              ),
+            
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
   }
 
-  void _abrirConfiguracionComunidades() {
-    Navigator.pushNamed(context, '/comunidades').then((_) {
-      _cargarMisComunidades();
-    });
-  }
-
-  // ✅ VISTA CUANDO NO TIENE COMUNIDADES
+  // ✅ VISTA CUANDO NO TIENE COMUNIDADES (solo se muestra si realmente no tiene)
   Widget _buildSinComunidades() {
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -144,7 +250,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Icono principal
               Container(
                 width: 120,
                 height: 120,
@@ -164,7 +269,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
               const SizedBox(height: 30),
               
-              // Título
               const Text(
                 'Únete a la Comunidad',
                 style: TextStyle(
@@ -176,7 +280,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
               const SizedBox(height: 12),
               
-              // Descripción
               Text(
                 'Crea tu propia comunidad con amigos o únete a una existente usando un código único',
                 style: TextStyle(
@@ -188,14 +291,13 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
               const SizedBox(height: 50),
               
-              // Botón CREAR COMUNIDAD
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pushNamed(context, '/crear-comunidad').then((_) {
-                      _cargarMisComunidades(); // Recargar después de crear
+                      _cargarMisComunidades();
                     });
                   },
                   icon: const Icon(Icons.add_circle_outline, size: 24),
@@ -219,14 +321,13 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
               const SizedBox(height: 16),
               
-              // Botón UNIRSE A COMUNIDAD
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pushNamed(context, '/unirse-comunidad').then((_) {
-                      _cargarMisComunidades(); // Recargar después de unirse
+                      _cargarMisComunidades();
                     });
                   },
                   icon: const Icon(Icons.link, size: 24),
@@ -252,7 +353,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
               const SizedBox(height: 40),
               
-              // Footer informativo
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -287,248 +387,362 @@ class _CommunityScreenState extends State<CommunityScreen> {
     );
   }
 
-  // ✅ VISTA CUANDO SÍ TIENE COMUNIDADES - MUESTRA SU COMUNIDAD PRINCIPAL
-  Widget _buildConComunidades() {
+  // ✅ VISTA PRINCIPAL: Dashboard de su comunidad con podium completo
+  Widget _buildDashboardComunidad() {
+    final rankingMiembros = List<Map<String, dynamic>>.from(_comunidadActual!['usuarios'] ?? []);
+    
     return Scaffold(
+      key: _scaffoldKey, // ✅ NUEVO: Clave para el drawer
       backgroundColor: Colors.grey[50],
+      
+      // ✅ NUEVO: Drawer con todas las comunidades
+      drawer: CommunityDrawer(
+        comunidades: _misComunidades,
+        comunidadActual: _comunidadActual,
+        onComunidadSelected: _cambiarComunidad,
+      ),
+      
       appBar: AppBar(
-        title: Text(
-          // ✅ TÍTULO DINÁMICO según si es creador o miembro
-          _comunidadActual!['es_creador'] == true ? 'Mi Comunidad' : 'Comunidad',
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-          ),
+        // ✅ NUEVO: Menú hamburguesa a la izquierda
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              _comunidadActual!['es_creador'] == true 
+                  ? Icons.admin_panel_settings 
+                  : Icons.groups,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _comunidadActual!['nombre'] ?? 'Mi Comunidad',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
         ),
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
         elevation: 0,
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: false, // ✅ CAMBIAR: Ya no es false
         actions: [
-          // ✅ Botón de configuración arriba a la derecha
+          // ✅ Botón de ajustes a la derecha (como antes)
           IconButton(
-            onPressed: _abrirConfiguracionComunidades,
+            onPressed: _abrirGestionComunidades,
             icon: const Icon(Icons.settings),
             tooltip: 'Gestionar Comunidades',
           ),
         ],
       ),
+      
+      // ... TODO EL BODY IGUAL SIN CAMBIOS ...
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ✅ Card de información de SU comunidad principal
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        // ✅ COLOR DIFERENTE si es creador vs miembro
-                        _comunidadActual!['es_creador'] == true 
-                            ? const Color(0xFF1565C0) 
-                            : const Color(0xFF2E7D32), // Verde si es miembro
-                        _comunidadActual!['es_creador'] == true 
-                            ? const Color(0xFF1976D2) 
-                            : const Color(0xFF388E3C),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+        child: RefreshIndicator(
+          onRefresh: _cargarMisComunidades,
+          color: const Color(0xFF1565C0),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ✅ Card principal de la comunidad (más compacto para dashboard)
+                Card(
+                  elevation: 6,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            // ✅ ÍCONO DIFERENTE si es creador vs miembro
-                            _comunidadActual!['es_creador'] == true 
-                                ? Icons.admin_panel_settings 
-                                : Icons.groups,
-                            color: Colors.white,
-                            size: 30,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _comunidadActual!['nombre'] ?? 'Sin nombre',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          _comunidadActual!['es_creador'] == true 
+                              ? const Color(0xFF1565C0) 
+                              : const Color(0xFF2E7D32),
+                          _comunidadActual!['es_creador'] == true 
+                              ? const Color(0xFF1976D2) 
+                              : const Color(0xFF388E3C),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _comunidadActual!['es_creador'] == true 
+                                    ? Icons.emoji_events 
+                                    : Icons.groups,
                                 color: Colors.white,
+                                size: 28,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _comunidadActual!['descripcion'] ?? 'Sin descripción',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white.withOpacity(0.9),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _comunidadActual!['nombre'] ?? 'Sin nombre',
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _comunidadActual!['es_creador'] == true 
+                                        ? '👑 Eres el Administrador' 
+                                        : '👤 Miembro de la comunidad',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _buildInfoChip(
-                            'Código: ${_comunidadActual!['codigo_unico'] ?? 'N/A'}',
-                            Icons.vpn_key,
-                          ),
-                          _buildInfoChip(
-                            '${_comunidadActual!['total_miembros'] ?? 0} miembros',
-                            Icons.person,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _buildInfoChip(
-                        // ✅ MENSAJE CLARO sobre su rol
-                        _comunidadActual!['es_creador'] == true 
-                            ? '🎖️ Eres el Administrador' 
-                            : '👤 Eres Miembro',
-                        Icons.emoji_events,
-                        isHighlight: true,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              // ✅ Título del ranking
-              Row(
-                children: [
-                  const Icon(
-                    Icons.leaderboard,
-                    color: Color(0xFF1565C0),
-                    size: 28,
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Ranking de Miembros',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1565C0),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              
-              // ✅ Lista del ranking REAL
-              if (_rankingMiembros.isNotEmpty)
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _rankingMiembros.length,
-                  itemBuilder: (context, index) {
-                    final miembro = _rankingMiembros[index];
-                    final isTopThree = (miembro['posicion'] ?? 999) <= 3;
-                    return _buildRankingItem(miembro, isTopThree);
-                  },
-                )
-              else
-                // Mensaje cuando no hay ranking
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.emoji_events_outlined,
-                          size: 48,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          _comunidadActual!['es_creador'] == true 
-                              ? 'Tu comunidad está lista.\n¡Invita amigos para crear competencia!'
-                              : 'Aún no hay actividad en el ranking.\n¡Completa rutas para ganar puntos!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                          ),
+                        const SizedBox(height: 16),
+                        
+                        // Estadísticas en fila
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildStatCard(
+                                'Miembros',
+                                '${_comunidadActual!['total_miembros'] ?? 0}',
+                                Icons.people,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildStatCard(
+                                'Código',
+                                '${_comunidadActual!['codigo_unico'] ?? 'N/A'}',
+                                Icons.vpn_key,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ),
-              
-              const SizedBox(height: 20),
-              
-              // ✅ Información adicional
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _comunidadActual!['es_creador'] == true 
-                      ? Colors.blue[50] 
-                      : Colors.green[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _comunidadActual!['es_creador'] == true 
-                        ? Colors.blue[200]! 
-                        : Colors.green[200]!,
-                  ),
-                ),
-                child: Row(
+                const SizedBox(height: 24),
+                
+                // ✅ Título del ranking con icono
+                Row(
                   children: [
-                    Icon(
-                      _comunidadActual!['es_creador'] == true 
-                          ? Icons.info_outline 
-                          : Icons.local_fire_department,
-                      color: _comunidadActual!['es_creador'] == true 
-                          ? Colors.blue[600] 
-                          : Colors.green[600],
-                      size: 20,
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1565C0).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.leaderboard,
+                        color: Color(0xFF1565C0),
+                        size: 24,
+                      ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
+                    const Expanded(
                       child: Text(
-                        _comunidadActual!['es_creador'] == true 
-                            ? 'Comparte el código de tu comunidad con amigos para que se unan'
-                            : 'Completa rutas y actividades para ganar puntos y subir en el ranking',
+                        'Ranking de Miembros',
                         style: TextStyle(
-                          fontSize: 14,
-                          color: _comunidadActual!['es_creador'] == true 
-                              ? Colors.blue[700] 
-                              : Colors.green[700],
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1565C0),
+                        ),
+                      ),
+                    ),
+                    // Chip con total de participantes
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1565C0).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${rankingMiembros.length} participantes',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF1565C0),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                
+                // ✅ PODIUM/RANKING completo con datos reales
+                if (rankingMiembros.isNotEmpty)
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: rankingMiembros.length,
+                    itemBuilder: (context, index) {
+                      final miembro = rankingMiembros[index];
+                      final isTopThree = (miembro['posicion'] ?? 999) <= 3;
+                      return _buildRankingItem(miembro, isTopThree);
+                    },
+                  )
+                else
+                  // Mensaje cuando no hay ranking
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.emoji_events_outlined,
+                            size: 48,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _comunidadActual!['es_creador'] == true 
+                                ? 'Tu comunidad está lista!\n¡Invita amigos para crear competencia!'
+                                : 'Aún no hay actividad en el ranking.\n¡Completa rutas para ganar puntos!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[600],
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                
+                const SizedBox(height: 20),
+                
+                // ✅ Información adicional/tips
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _comunidadActual!['es_creador'] == true 
+                        ? Colors.blue[50] 
+                        : Colors.green[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _comunidadActual!['es_creador'] == true 
+                          ? Colors.blue[200]! 
+                          : Colors.green[200]!,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _comunidadActual!['es_creador'] == true 
+                            ? Icons.share 
+                            : Icons.local_fire_department,
+                        color: _comunidadActual!['es_creador'] == true 
+                            ? Colors.blue[600] 
+                            : Colors.green[600],
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _comunidadActual!['es_creador'] == true 
+                              ? 'Comparte el código ${_comunidadActual!['codigo_unico']} con amigos para que se unan'
+                              : 'Completa rutas y actividades para ganar puntos y subir en el ranking',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: _comunidadActual!['es_creador'] == true 
+                                ? Colors.blue[700] 
+                                : Colors.green[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Espaciado final para scroll
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // Widget para construir cada item del ranking CON DATOS REALES
+  // ✅ Widget para estadísticas en el card principal
+  Widget _buildStatCard(String title, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            color: Colors.white,
+            size: 20,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ Widget para cada item del ranking (IGUAL que antes)
   Widget _buildRankingItem(Map<String, dynamic> miembro, bool isTopThree) {
-    // ✅ Obtener avatar real (iniciales del nombre)
     String getAvatar(String? nombre) {
       if (nombre == null || nombre.isEmpty) return 'U';
       
@@ -553,11 +767,17 @@ class _CommunityScreenState extends State<CommunityScreen> {
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
-        ] : null,
+        ] : [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          // Posición and medalla
+          // Posición con medalla
           Container(
             width: 40,
             height: 40,
@@ -586,7 +806,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
           ),
           const SizedBox(width: 12),
           
-          // Avatar del usuario REAL
+          // Avatar del usuario
           Container(
             width: 45,
             height: 45,
@@ -608,7 +828,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
           ),
           const SizedBox(width: 12),
           
-          // Información del usuario REAL
+          // Información del usuario
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -622,7 +842,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                // ✅ ARREGLADO: Usar Wrap para evitar overflow en puntos y racha
                 Wrap(
                   spacing: 8,
                   runSpacing: 4,
@@ -662,54 +881,20 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
   Color _getTopThreeColor(int posicion) {
     switch (posicion) {
-      case 1: return Colors.amber; // Oro
-      case 2: return Colors.grey[400]!; // Plata  
-      case 3: return Colors.orange[300]!; // Bronce
+      case 1: return Colors.amber;
+      case 2: return Colors.grey[400]!;
+      case 3: return Colors.orange[300]!;
       default: return Colors.grey[400]!;
     }
   }
 
   IconData _getTopThreeIcon(int posicion) {
     switch (posicion) {
-      case 1: return Icons.emoji_events; // Trofeo
-      case 2: return Icons.military_tech; // Medalla
-      case 3: return Icons.military_tech; // Medalla
+      case 1: return Icons.emoji_events;
+      case 2: return Icons.military_tech;
+      case 3: return Icons.military_tech;
       default: return Icons.person;
     }
-  }
-
-  Widget _buildInfoChip(String text, IconData icon, {bool isHighlight = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: isHighlight 
-            ? Colors.white.withOpacity(0.2)
-            : Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: isHighlight 
-            ? Border.all(color: Colors.white.withOpacity(0.5))
-            : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: Colors.white,
-            size: 16,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: isHighlight ? FontWeight.bold : FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -744,11 +929,13 @@ class _CommunityScreenState extends State<CommunityScreen> {
       );
     }
 
-    // ✅ LÓGICA PRINCIPAL: Mostrar vista según si tiene comunidades o no
+    // ✅ LÓGICA PRINCIPAL: 
+    // - Si NO tiene comunidades → Mostrar pantalla de crear/unirse
+    // - Si SÍ tiene comunidades → Mostrar dashboard de su comunidad principal
     if (_comunidadActual == null) {
-      return _buildSinComunidades(); // Sin comunidades
+      return _buildSinComunidades(); // Solo cuando NO tiene comunidades
     } else {
-      return _buildConComunidades(); // Con SU comunidad principal
+      return _buildDashboardComunidad(); // Dashboard principal de su comunidad
     }
   }
 }

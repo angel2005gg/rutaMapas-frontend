@@ -297,21 +297,86 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(
                         width: double.infinity,
                         height: 48,
-                        child: OutlinedButton.icon(
+                        child: OutlinedButton(
                           onPressed: _isLoading ? null : _handleGoogleSignIn,
-                          icon: const Icon(Icons.g_mobiledata, size: 24),
-                          label: const Text(
-                            'Continuar con Google',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.black87,
-                            ),
-                          ),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(color: Colors.grey[400]!),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min, // ✅ ARREGLA EL OVERFLOW
+                            children: [
+                              // ✅ LOGO DE GOOGLE CON COLORES REALES
+                              RichText(
+                                text: const TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: 'G',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF4285F4), // Azul Google
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: 'o',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFFEA4335), // Rojo Google
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: 'o',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFFFBBC04), // Amarillo Google
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: 'g',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF4285F4), // Azul Google
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: 'l',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF34A853), // Verde Google
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: 'e',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFFEA4335), // Rojo Google
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // ✅ TEXTO MÁS CORTO + FLEXIBLE
+                              const Flexible(
+                                child: Text(
+                                  'Iniciar con Google', // ✅ TEXTO MÁS CORTO
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.black87,
+                                  ),
+                                  overflow: TextOverflow.ellipsis, // ✅ POR SI ACASO
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
