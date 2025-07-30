@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/comunidad_service.dart';
 import '../widgets/community_drawer.dart'; // ✅ NUEVO: Import del drawer
+import '../widgets/community_management_sheet.dart';
 
 class CommunityScreen extends StatefulWidget {
   const CommunityScreen({Key? key}) : super(key: key);
@@ -39,6 +40,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
     });
   }
 
+  // ✅ ACTUALIZAR el método _cargarMisComunidades() para manejar correctamente cuando no hay comunidades:
+
   Future<void> _cargarMisComunidades() async {
     setState(() => _isLoading = true);
     
@@ -54,7 +57,11 @@ class _CommunityScreenState extends State<CommunityScreen> {
           setState(() {
             _misComunidades = comunidades;
             
-            if (comunidades.isNotEmpty) {
+            // ✅ ARREGLO PRINCIPAL: Si no hay comunidades, limpiar _comunidadActual
+            if (comunidades.isEmpty) {
+              _comunidadActual = null; // ✅ ESTO FORZARÁ A MOSTRAR _buildSinComunidades()
+              print('No hay comunidades - limpiando comunidad actual');
+            } else {
               // ✅ LÓGICA PRIORITARIA: Buscar primero la comunidad donde es CREADOR
               Map<String, dynamic>? comunidadCreador;
               Map<String, dynamic>? otraComunidad;
@@ -80,7 +87,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
           print('Sin comunidades o error: ${result.toString()}'); // Debug
           setState(() {
             _misComunidades = [];
-            _comunidadActual = null;
+            _comunidadActual = null; // ✅ LIMPIAR TAMBIÉN AQUÍ
           });
         }
       }
@@ -89,7 +96,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
       if (mounted) {
         setState(() {
           _misComunidades = [];
-          _comunidadActual = null;
+          _comunidadActual = null; // ✅ LIMPIAR EN CASO DE ERROR TAMBIÉN
         });
         
         ScaffoldMessenger.of(context).showSnackBar(
@@ -107,122 +114,14 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   void _abrirGestionComunidades() {
-    // ✅ NUEVA FUNCIÓN: Mostrar opciones para gestionar comunidades
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Indicador visual
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            
-            const Text(
-              'Gestionar Comunidades',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1565C0),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Crear nueva comunidad
-            ListTile(
-              leading: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1565C0).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.add_circle_outline,
-                  color: Color(0xFF1565C0),
-                ),
-              ),
-              title: const Text(
-                'Crear Nueva Comunidad',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: const Text('Inicia tu propia comunidad'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/crear-comunidad').then((_) {
-                  _cargarMisComunidades();
-                });
-              },
-            ),
-            
-            // Unirse a comunidad
-            ListTile(
-              leading: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.group_add,
-                  color: Colors.green,
-                ),
-              ),
-              title: const Text(
-                'Unirse a Comunidad',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: const Text('Únete con un código de invitación'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/unirse-comunidad').then((_) {
-                  _cargarMisComunidades();
-                });
-              },
-            ),
-            
-            // Ver todas mis comunidades (si tiene múltiples)
-            if (_misComunidades.length > 1)
-              ListTile(
-                leading: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.groups,
-                    color: Colors.orange,
-                  ),
-                ),
-                title: const Text(
-                  'Mis Comunidades',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text('Tienes ${_misComunidades.length} comunidades'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // Aquí podrías navegar a una pantalla con todas las comunidades
-                },
-              ),
-            
-            const SizedBox(height: 10),
-          ],
-        ),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => CommunityManagementSheet(
+        misComunidades: _misComunidades,
+        comunidadActual: _comunidadActual!,
+        onComunidadUpdated: _cargarMisComunidades, // ✅ Callback para recargar
       ),
     );
   }

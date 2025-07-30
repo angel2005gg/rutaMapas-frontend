@@ -134,4 +134,100 @@ class ComunidadService {
       return {'status': 'error', 'message': 'Error de conexión: ${e.toString()}'};
     }
   }
+
+  // ✅ AGREGAR estos dos métodos nuevos al final del archivo:
+
+  // ✅ NUEVO: Salir de una comunidad (para miembros)
+  Future<Map<String, dynamic>> salirDeComunidad(int comunidadId) async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        return {
+          'status': 'error',
+          'message': 'No estás autenticado'
+        };
+      }
+
+      // ✅ USAR TU RUTA EXACTA: DELETE /api/comunidades/{id}/salir
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.comunidadesUrl}/$comunidadId/salir'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('Salir de comunidad response status: ${response.statusCode}');
+      print('Salir de comunidad response body: ${response.body}');
+
+      final responseData = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'status': 'success',
+          'message': responseData['message'] ?? 'Has salido de la comunidad exitosamente',
+          'data': responseData,
+        };
+      } else {
+        return {
+          'status': 'error',
+          'message': responseData['message'] ?? 'Error al salir de la comunidad',
+          'errors': responseData['errors'],
+        };
+      }
+    } catch (e) {
+      print('Error en salirDeComunidad: $e');
+      return {
+        'status': 'error',
+        'message': 'Error de conexión: ${e.toString()}'
+      };
+    }
+  }
+
+  // ✅ NUEVO: Eliminar una comunidad (solo para creadores/admins)
+  Future<Map<String, dynamic>> eliminarComunidad(int comunidadId) async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        return {
+          'status': 'error',
+          'message': 'No estás autenticado'
+        };
+      }
+
+      // ✅ USAR TU RUTA EXACTA: DELETE /api/comunidades/{id}/eliminar
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.comunidadesUrl}/$comunidadId/eliminar'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('Eliminar comunidad response status: ${response.statusCode}');
+      print('Eliminar comunidad response body: ${response.body}');
+
+      final responseData = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'status': 'success',
+          'message': responseData['message'] ?? 'Comunidad eliminada exitosamente',
+          'data': responseData,
+        };
+      } else {
+        return {
+          'status': 'error',
+          'message': responseData['message'] ?? 'Error al eliminar la comunidad',
+          'errors': responseData['errors'],
+        };
+      }
+    } catch (e) {
+      print('Error en eliminarComunidad: $e');
+      return {
+        'status': 'error',
+        'message': 'Error de conexión: ${e.toString()}'
+      };
+    }
+  }
 }
