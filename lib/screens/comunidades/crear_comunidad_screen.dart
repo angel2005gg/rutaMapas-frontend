@@ -99,7 +99,18 @@ class _CrearComunidadScreenState extends State<CrearComunidadScreen> {
             children: [
               Icon(Icons.check_circle, color: Colors.green, size: 28),
               SizedBox(width: 8),
-              Text('¡Comunidad Creada!'),
+              // ✅ ARREGLO: Usar Expanded para evitar overflow
+              Expanded(
+                child: Text(
+                  '¡Comunidad Creada!',
+                  style: TextStyle(
+                    fontSize: 18, // ✅ Reducir tamaño
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis, // ✅ Por si acaso
+                  maxLines: 1, // ✅ Solo 1 línea
+                ),
+              ),
             ],
           ),
           content: Column(
