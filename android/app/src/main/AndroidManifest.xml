@@ -1,10 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- ✅ AGREGAR SOLO ESTOS PERMISOS -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     
     <application
         android:label="ruta_map_frontend"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        
+        <!-- ✅ AGREGAR SOLO ESTA LÍNEA CON TU API KEY EXISTENTE -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyCP1xS8HLdxQe-a1KeuXGQzaVIqoQvKmYo" />
+        
+        <!-- Todo lo demás IGUAL -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
