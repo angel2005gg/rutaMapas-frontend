@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'dart:convert'; // ✅ NUEVO
-import 'package:http/http.dart' as http; // ✅ NUEVO
-import '../services/location_service.dart'; // ✅ NUEVO
 
 class NavigationBottomSheet extends StatefulWidget {
   final String? rutaInfo;
@@ -38,10 +35,6 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
   double _currentHeight = 50.0;
   bool _isDragging = false;
   double _startDragHeight = 0.0;
-  
-  // ✅ NUEVAS VARIABLES PARA DIRECCIÓN ACTUAL
-  String _direccionActual = 'Obteniendo ubicación...';
-  bool _cargandoDireccion = true;
 
   @override
   void initState() {
@@ -59,7 +52,6 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
       curve: Curves.easeInOut,
     ));
 
-    // Listener más eficiente
     _heightAnimation.addListener(() {
       if (!_isDragging) {
         setState(() {
@@ -67,9 +59,6 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
         });
       }
     });
-
-    // ✅ OBTENER DIRECCIÓN AL INICIALIZAR
-    _obtenerDireccionActual();
   }
 
   @override
@@ -101,7 +90,6 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
     _animationController.reverse();
   }
 
-  // Manejo mejorado del deslizamiento
   void _onPanStart(DragStartDetails details) {
     if (!widget.mostrandoRuta) return;
     
@@ -149,197 +137,170 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
     }
   }
 
-   @override
-Widget build(BuildContext context) {
-  return Stack(
-    children: [
-      // Bottom sheet con deslizamiento manual
-      AnimatedBuilder(
-        animation: _heightAnimation,
-        builder: (context, child) {
-          return Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: GestureDetector(
-              onPanStart: _onPanStart,
-              onPanUpdate: _onPanUpdate,
-              onPanEnd: _onPanEnd,
-              child: Container(
-                height: _heightAnimation.value,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 8,
-                      offset: Offset(0, -2),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Handle más visible para deslizar
-                      Container(
-                        margin: const EdgeInsets.only(top: 6),
-                        width: 40,
-                        height: 3,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[400],
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      
-                      // Contenido con overflow controlado
-                      Flexible(
-                        child: SingleChildScrollView(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            child: widget.mostrandoRuta 
-                                ? _buildRutaContentMinimal()
-                                : _buildDefaultContentMinimal(),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ), // ✅ ARREGLO 1: Cerrar Positioned correctamente
-          );
-        },
-      ), // ✅ ARREGLO 2: Cerrar AnimatedBuilder correctamente
-      
-      // Botón flotante
-      if (widget.mostrandoRuta)
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Bottom sheet con deslizamiento manual
         AnimatedBuilder(
           animation: _heightAnimation,
           builder: (context, child) {
             return Positioned(
               left: 0,
               right: 0,
-              bottom: _heightAnimation.value + 8,
-              child: Center(
+              bottom: 0,
+              child: GestureDetector(
+                onPanStart: _onPanStart,
+                onPanUpdate: _onPanUpdate,
+                onPanEnd: _onPanEnd,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  decoration: BoxDecoration(
+                  height: _heightAnimation.value,
+                  decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(25),
-                    border: Border.all(
-                      color: Colors.grey[300]!,
-                      width: 1,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
+                        color: Colors.black26,
+                        blurRadius: 8,
+                        offset: Offset(0, -2),
                       ),
                     ],
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(25),
-                      onTap: widget.onComenzarNavegacion,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.navigation,
-                              color: Colors.grey,
-                              size: 14,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Handle más visible para deslizar
+                        Container(
+                          margin: const EdgeInsets.only(top: 6),
+                          width: 40,
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[400],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        
+                        // Contenido con overflow controlado
+                        Flexible(
+                          child: SingleChildScrollView(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              child: widget.mostrandoRuta 
+                                  ? _buildRutaContentMinimal()
+                                  : _buildDefaultContentMinimal(),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'INICIAR RUTA',
-                            style: TextStyle(
-                              color: Colors.black54,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
-            ); // ✅ ARREGLO 3: Cerrar Positioned del botón correctamente
+            );
           },
-        ), // ✅ ARREGLO 4: Cerrar AnimatedBuilder del botón correctamente
-    ],
-  );
-} // ✅ ARREGLO 5: Cerrar método build correctamente
-  // Contenido por defecto
-  // ✅ NUEVO CONTENIDO POR DEFECTO CON DIRECCIÓN ACTUAL
+        ),
+        
+        // Botón flotante
+        if (widget.mostrandoRuta)
+          AnimatedBuilder(
+            animation: _heightAnimation,
+            builder: (context, child) {
+              return Positioned(
+                left: 0,
+                right: 0,
+                bottom: _heightAnimation.value + 8,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(
+                        color: Colors.grey[300]!,
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(25),
+                        onTap: widget.onComenzarNavegacion,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.navigation,
+                                color: Colors.grey,
+                                size: 14,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'INICIAR RUTA',
+                              style: TextStyle(
+                                color: Colors.black54,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  // ✅ CONTENIDO POR DEFECTO SIMPLE
   Widget _buildDefaultContentMinimal() {
-    return Center(
+    return const Center(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.location_on,
+            Icons.navigation_outlined,
             size: 16,
-            color: _cargandoDireccion ? Colors.grey : const Color(0xFF1565C0),
+            color: Colors.grey,
           ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: _cargandoDireccion 
-              ? Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[400]!),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Obteniendo ubicación...',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                )
-              : Text(
-                  _direccionActual,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.black87,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+          SizedBox(width: 6),
+          Text(
+            'Busca un lugar',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -456,81 +417,5 @@ Widget build(BuildContext context) {
         ),
       ],
     );
-  }
-
-  // ✅ NUEVO MÉTODO PARA OBTENER DIRECCIÓN
-  Future<void> _obtenerDireccionActual() async {
-    try {
-      // Importar el servicio de ubicación
-      final position = await LocationService.getCurrentLocation();
-      
-      if (position != null) {
-        // Llamar a Google Geocoding API para obtener la dirección
-        final direccion = await _obtenerDireccionDesdeCoordenas(
-          position.latitude, 
-          position.longitude
-        );
-        
-        if (mounted) {
-          setState(() {
-            _direccionActual = direccion;
-            _cargandoDireccion = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _direccionActual = 'No se pudo obtener ubicación';
-            _cargandoDireccion = false;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _direccionActual = 'Error obteniendo ubicación';
-          _cargandoDireccion = false;
-        });
-      }
-    }
-  }
-
-  // ✅ MÉTODO PARA CONVERTIR COORDENADAS A DIRECCIÓN
-  Future<String> _obtenerDireccionDesdeCoordenas(double lat, double lng) async {
-    try {
-      const apiKey = 'AIzaSyCP1xS8HLdxQe-a1KeuXGQzaVIqoQvKmYo'; // Tu API key existente
-      final url = 'https://maps.googleapis.com/maps/api/geocode/json?'
-          'latlng=$lat,$lng&'
-          'key=$apiKey&'
-          'language=es&'
-          'region=co';
-      
-      final response = await http.get(Uri.parse(url));
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        
-        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
-          final result = data['results'][0];
-          String direccion = result['formatted_address'];
-          
-          // Limpiar la dirección para mostrar solo lo relevante
-          direccion = direccion.replaceAll(', Colombia', '');
-          
-          // Si es muy larga, mostrar solo los primeros componentes
-          final partes = direccion.split(', ');
-          if (partes.length > 3) {
-            direccion = partes.take(3).join(', ');
-          }
-          
-          return direccion;
-        }
-      }
-      
-      return 'Ubicación desconocida';
-    } catch (e) {
-      print('Error obteniendo dirección: $e');
-      return 'Error obteniendo dirección';
-    }
   }
 }
