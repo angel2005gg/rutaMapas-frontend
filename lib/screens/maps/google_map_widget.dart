@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../services/location_service.dart';
 import '../../services/places_service.dart';
 import '../../services/directions_service.dart';
+import '../../widgets/map_type_selector.dart'; // ✅ NUEVO IMPORT
 
 class GoogleMapWidget extends StatefulWidget {
   final Function(String)? onRutaCalculada;
@@ -29,6 +30,9 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
   Set<Polyline> _polylines = {};
   String? _rutaInfo;
   bool _mostrandoRuta = false;
+  
+  // ✅ NUEVA VARIABLE para tipo de mapa
+  MapType _currentMapType = MapType.normal;
 
   static const LatLng _initialPosition = LatLng(3.4968807, -76.5192206);
 
@@ -500,6 +504,29 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
     }
   }
 
+  // ✅ MÉTODO MEJORADO para los 3 tipos
+  void _onMapTypeChanged(MapType tipo) {
+    setState(() {
+      _currentMapType = tipo;
+    });
+    
+    // ✅ LÓGICA CORREGIDA:
+    // Normal = Tu estilo personalizado
+    // Satelital = Sin estilo (Google satelital)  
+    // Claro = Sin estilo (Google por defecto)
+    if (_mapController != null) {
+      if (tipo == MapType.normal) {
+        // Tu estilo personalizado oscuro
+        _mapController!.setMapStyle(_colorfulMapStyle);
+      } else {
+        // Satélite y Claro = sin estilo personalizado
+        _mapController!.setMapStyle(null);
+      }
+    }
+    
+    print('🗺️ Tipo de mapa cambiado a: ${tipo.toString()}');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -517,17 +544,21 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
             _mapController!.setMapStyle(_colorfulMapStyle);
             print('✅ Mapa creado exitosamente con estilo colorido');
           },
-          myLocationEnabled: false, // ✅ DESHABILITAR el botón nativo
-          myLocationButtonEnabled: false, // ✅ DESHABILITAR el botón nativo
+          myLocationEnabled: false,
+          myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
           compassEnabled: true,
           mapToolbarEnabled: false,
           markers: _allMarkers,
           polylines: _polylines,
-          mapType: MapType.normal,
+          mapType: _currentMapType,
+          // ✅ NUEVA LÍNEA: Empuja todos los controles hacia abajo
+          padding: const EdgeInsets.only(
+            top: 600
+          ), // 120px desde arriba
         ),
         
-        // ✅ LOADING OVERLAY
+        // ✅ LOADING OVERLAY (sin cambios)
         if (_isLoading)
           Container(
             color: const Color(0xFF1a1a2e),
@@ -553,7 +584,7 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
             ),
           ),
         
-        // ✅ ERROR OVERLAY
+        // ✅ ERROR OVERLAY (sin cambios)
         if (_errorMessage.isNotEmpty && !_isLoading)
           Container(
             color: const Color(0xFF1a1a2e),
@@ -592,10 +623,21 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
             ),
           ),
         
-        // ✅ BOTÓN DE MI UBICACIÓN (REUBICADO PARA QUE SEA VISIBLE)
+        // ✅ NUEVO: SELECTOR DE TIPO DE MAPA
         if (!_isLoading && _errorMessage.isEmpty)
           Positioned(
-            bottom: 120, // ✅ REDUCIDO de 180 a 120 (60px más abajo)
+            top: 110, // ✅ CAMBIO: de 80 a 110 (más abajo del buscador)
+            right: 16,
+            child: MapTypeSelector(
+              currentMapType: _currentMapType,
+              onMapTypeChanged: _onMapTypeChanged,
+            ),
+          ),
+      
+        // ✅ BOTÓN DE MI UBICACIÓN (SIN CAMBIOS)
+        if (!_isLoading && _errorMessage.isEmpty)
+          Positioned(
+            bottom: 120,
             right: 16,
             child: FloatingActionButton(
               onPressed: _goToMyLocation,
