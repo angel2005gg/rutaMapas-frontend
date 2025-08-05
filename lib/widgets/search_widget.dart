@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../services/mapbox_service.dart';
+import '../services/places_service.dart'; // ✅ CAMBIAR: usar Google Places en lugar de MapboxService
 
 class SearchWidget extends StatefulWidget {
   final Function(LatLng, String) onPlaceSelected;
@@ -21,30 +21,55 @@ class _SearchWidgetState extends State<SearchWidget> {
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // ✅ CAMBIAR TODO ESTE MÉTODO para usar Google Places
   Future<void> _buscarLugares(String query) async {
     if (query.trim().isEmpty) {
-      setState(() => _searchResults = []);
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
       return;
     }
 
     setState(() => _isSearching = true);
 
     try {
-      final results = await MapboxService.buscarLugares(
-        consulta: query,
-        proximidad: widget.currentLocation,
-        limite: 5,
+      // ✅ USAR GOOGLE PLACES TEXT SEARCH en lugar de MapboxService
+      final lugares = await PlacesService.buscarLugaresPorTexto(
+        consulta: query.trim(),
+        ubicacionActual: widget.currentLocation,
+        radio: 5000,
       );
 
-      setState(() {
-        _searchResults = results;
-        _isSearching = false;
-      });
+      // Convertir el formato de Google Places al formato esperado por el widget
+      final resultadosFormateados = lugares.map((lugar) {
+        return {
+          'nombre': lugar['nombre'],
+          'direccion': lugar['direccion'],
+          'coordenadas': lugar['coordenadas'],
+        };
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _searchResults = resultadosFormateados;
+          _isSearching = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
+      if (mounted) {
+        setState(() {
+          _searchResults = [];
+          _isSearching = false;
+        });
+        print('❌ Error en búsqueda: $e');
+      }
     }
   }
 

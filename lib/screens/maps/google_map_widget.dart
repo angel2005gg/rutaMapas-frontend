@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../services/location_service.dart';
-import '../../services/places_service.dart'; // ✅ AGREGAR ESTA LÍNEA
+import '../../services/places_service.dart';
+import '../../services/directions_service.dart';
 
 class GoogleMapWidget extends StatefulWidget {
-  const GoogleMapWidget({Key? key}) : super(key: key);
+  final Function(String)? onRutaCalculada;
+
+  const GoogleMapWidget({
+    Key? key,
+    this.onRutaCalculada,
+  }) : super(key: key);
 
   @override
   State<GoogleMapWidget> createState() => _GoogleMapWidgetState();
@@ -16,15 +22,16 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
   Position? _currentPosition;
   bool _isLoading = true;
   String _errorMessage = '';
-  
-  // ✅ AGREGAR ESTAS LÍNEAS NUEVAS
   Set<Marker> _allMarkers = {};
   bool _showingPlaces = false;
   
-  // ✅ Tu ubicación real de Colombia (Cali) - SIN CAMBIOS
+  // Variables para rutas
+  Set<Polyline> _polylines = {};
+  String? _rutaInfo;
+  bool _mostrandoRuta = false;
+
   static const LatLng _initialPosition = LatLng(3.4968807, -76.5192206);
 
-  // ✅ ESTILO DEL MAPA - SIN CAMBIOS (mantener tu estilo actual)
   static const String _colorfulMapStyle = '''
 [
   {
@@ -226,14 +233,11 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
   @override
   void initState() {
     super.initState();
-    PlacesService.testPlacesAPI(); // ✅ AGREGAR ESTA LÍNEA PARA TESTING
     _getCurrentLocation();
   }
 
-  // ✅ REEMPLAZAR TODO EL MÉTODO _getCurrentLocation() CON ESTE:
   Future<void> _getCurrentLocation() async {
     try {
-      // Verificar permisos
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -254,7 +258,6 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
         return;
       }
 
-      // Obtener ubicación
       Position? position = await LocationService.getCurrentLocation();
       
       if (position != null) {
@@ -263,7 +266,6 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
           _isLoading = false;
         });
         
-        // ✅ ZOOM PRIMERO - SIN ESPERAR
         if (_mapController != null) {
           await _mapController!.animateCamera(
             CameraUpdate.newCameraPosition(
@@ -277,11 +279,8 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
           );
         }
         
-        // ✅ CREAR MARCADOR DE UBICACIÓN
         _updateLocationMarker();
-        
-        // ✅ CARGAR LUGARES EN BACKGROUND - SIN BLOQUEAR
-        _cargarLugaresComerciales(); // Sin await
+        _cargarLugaresComerciales();
         
       } else {
         setState(() {
@@ -297,7 +296,6 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
     }
   }
 
-  // ✅ AGREGAR ESTE MÉTODO NUEVO
   void _updateLocationMarker() {
     if (_currentPosition == null) return;
     
@@ -317,49 +315,188 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
     });
   }
 
-  // ✅ AGREGAR ESTE MÉTODO NUEVO
   Future<void> _cargarLugaresComerciales() async {
     if (_currentPosition == null) return;
     
     try {
       final ubicacionActual = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
       
-      // ✅ BUSCAR LUGARES - SIN setState de loading
-      final lugaresPorCategoria = await PlacesService.buscarLugaresComerciales(
+      print('🌍 Buscando lugares con GOOGLE PLACES cerca de: ${ubicacionActual.latitude}, ${ubicacionActual.longitude}');
+      
+      final lugaresComerciales = await PlacesService.buscarLugaresComerciales(
         ubicacion: ubicacionActual,
-        radio: 2000, // 2km de radio
+        radio: 3000,
       );
       
-      // ✅ SOLO actualizar si hay lugares
-      if (lugaresPorCategoria.isNotEmpty) {
-        Set<Marker> nuevosMarcadores = {};
+      Set<Marker> nuevosMarcadores = {};
+      
+      _updateLocationMarker();
+      nuevosMarcadores.addAll(_allMarkers.where((m) => m.markerId.value == 'current_location'));
+      
+      print('🎯 Total de categorías con resultados: ${lugaresComerciales.length}');
+      
+      for (var categoria in lugaresComerciales.keys) {
+        final lugares = lugaresComerciales[categoria]!;
         
-        // ✅ Mantener marcador de ubicación actual
-        _updateLocationMarker();
-        nuevosMarcadores.addAll(_allMarkers.where((m) => m.markerId.value == 'current_location'));
-        
-        // ✅ Agregar marcadores de lugares comerciales
-        lugaresPorCategoria.forEach((categoria, lugares) {
-          for (var lugar in lugares.take(3)) { // ✅ SOLO 3 por categoría
-            final marcador = PlacesService.crearMarcadorDeLugar(
+        if (lugares.isNotEmpty) {
+          print('✅ Google Places $categoria: ${lugares.length} lugares encontrados');
+          
+          for (var lugar in lugares.take(5)) {
+            final marcador = await PlacesService.crearMarcadorDeLugar(
               lugar: lugar,
               categoria: categoria,
             );
             nuevosMarcadores.add(marcador);
           }
-        });
-        
-        if (mounted) {
-          setState(() {
-            _allMarkers = nuevosMarcadores;
-          });
+        } else {
+          print('⚠️ Google Places $categoria: No se encontraron lugares');
         }
-        
-        print('✅ Cargados ${nuevosMarcadores.length - 1} lugares comerciales');
+      }
+      
+      if (mounted && nuevosMarcadores.length > 1) {
+        setState(() {
+          _allMarkers = nuevosMarcadores;
+        });
+        print('✅ Google Places: ${nuevosMarcadores.length - 1} lugares cargados en el mapa');
       }
       
     } catch (e) {
-      print('❌ Error cargando lugares comerciales: $e');
+      print('❌ Error cargando lugares con Google Places: $e');
+    }
+  }
+
+  Future<void> mostrarRutaADestino(LatLng destino, String nombreDestino) async {
+    if (_currentPosition == null) {
+      print('❌ No hay ubicación actual para calcular ruta');
+      return;
+    }
+
+    try {
+      setState(() {
+        _mostrandoRuta = true;
+        _rutaInfo = 'Calculando ruta...';
+      });
+
+      widget.onRutaCalculada?.call('Calculando ruta...');
+
+      final origen = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+      
+      print('🗺️ Calculando ruta desde $origen hacia $destino');
+      
+      final rutaData = await DirectionsService.calcularRuta(
+        origen: origen,
+        destino: destino,
+      );
+
+      if (rutaData != null) {
+        final polyline = Polyline(
+          polylineId: const PolylineId('ruta_navegacion'),
+          points: rutaData['puntos_ruta'],
+          color: const Color(0xFF1565C0),
+          width: 5,
+          patterns: [],
+        );
+
+        final marcadorOrigen = Marker(
+          markerId: const MarkerId('origen_ruta'),
+          position: origen,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: const InfoWindow(
+            title: 'Tu ubicación',
+            snippet: 'Punto de inicio',
+          ),
+        );
+
+        final marcadorDestino = Marker(
+          markerId: const MarkerId('destino_ruta'),
+          position: destino,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          infoWindow: InfoWindow(
+            title: nombreDestino,
+            snippet: 'Destino seleccionado',
+          ),
+        );
+
+        setState(() {
+          _polylines = {polyline};
+          _allMarkers = {marcadorOrigen, marcadorDestino};
+          _rutaInfo = rutaData['resumen'];
+          _mostrandoRuta = true;
+        });
+
+        _ajustarVistaParaRuta(rutaData['puntos_ruta']);
+
+        print('✅ Ruta calculada: ${rutaData['resumen']}');
+        
+        widget.onRutaCalculada?.call(rutaData['resumen']);
+      } else {
+        setState(() {
+          _rutaInfo = 'No se pudo calcular la ruta';
+          _mostrandoRuta = false;
+        });
+        widget.onRutaCalculada?.call('Error al calcular ruta');
+      }
+    } catch (e) {
+      setState(() {
+        _rutaInfo = 'Error al calcular ruta: $e';
+        _mostrandoRuta = false;
+      });
+      print('❌ Error calculando ruta: $e');
+      widget.onRutaCalculada?.call('Error al calcular ruta');
+    }
+  }
+
+  void _ajustarVistaParaRuta(List<LatLng> puntos) {
+    if (puntos.isEmpty || _mapController == null) return;
+
+    double minLat = puntos.first.latitude;
+    double maxLat = puntos.first.latitude;
+    double minLng = puntos.first.longitude;
+    double maxLng = puntos.first.longitude;
+
+    for (var punto in puntos) {
+      if (punto.latitude < minLat) minLat = punto.latitude;
+      if (punto.latitude > maxLat) maxLat = punto.latitude;
+      if (punto.longitude < minLng) minLng = punto.longitude;
+      if (punto.longitude > maxLng) maxLng = punto.longitude;
+    }
+
+    final bounds = LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 100.0),
+    );
+  }
+
+  void limpiarRuta() {
+    setState(() {
+      _polylines.clear();
+      _rutaInfo = null;
+      _mostrandoRuta = false;
+    });
+    
+    _cargarLugaresComerciales();
+  }
+
+  // ✅ NUEVO: Método para ir a mi ubicación
+  void _goToMyLocation() async {
+    if (_currentPosition != null && _mapController != null) {
+      await _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+            zoom: 17.0,
+            tilt: 0,
+            bearing: 0,
+          ),
+        ),
+      );
+    } else {
+      // Si no hay ubicación, intentar obtenerla de nuevo
+      _getCurrentLocation();
     }
   }
 
@@ -367,7 +504,7 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // ✅ CAMBIAR SOLO ESTA LÍNEA EN EL GoogleMap:
+        // ✅ GOOGLE MAPS
         GoogleMap(
           initialCameraPosition: CameraPosition(
             target: _currentPosition != null 
@@ -380,16 +517,17 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
             _mapController!.setMapStyle(_colorfulMapStyle);
             print('✅ Mapa creado exitosamente con estilo colorido');
           },
-          myLocationEnabled: true,
-          myLocationButtonEnabled: false,
+          myLocationEnabled: false, // ✅ DESHABILITAR el botón nativo
+          myLocationButtonEnabled: false, // ✅ DESHABILITAR el botón nativo
           zoomControlsEnabled: false,
           compassEnabled: true,
           mapToolbarEnabled: false,
-          markers: _allMarkers, // ✅ CAMBIAR ESTA LÍNEA: usar _allMarkers en lugar del código anterior
+          markers: _allMarkers,
+          polylines: _polylines,
           mapType: MapType.normal,
         ),
         
-        // ✅ TODO EL RESTO IGUAL - SIN CAMBIOS
+        // ✅ LOADING OVERLAY
         if (_isLoading)
           Container(
             color: const Color(0xFF1a1a2e),
@@ -415,6 +553,7 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
             ),
           ),
         
+        // ✅ ERROR OVERLAY
         if (_errorMessage.isNotEmpty && !_isLoading)
           Container(
             color: const Color(0xFF1a1a2e),
@@ -445,9 +584,6 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF4299e1),
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
                     ),
                     child: const Text('Reintentar'),
                   ),
@@ -456,44 +592,20 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
             ),
           ),
         
+        // ✅ BOTÓN DE MI UBICACIÓN (REUBICADO PARA QUE SEA VISIBLE)
         if (!_isLoading && _errorMessage.isEmpty)
           Positioned(
-            bottom: 30,
+            bottom: 120, // ✅ REDUCIDO de 180 a 120 (60px más abajo)
             right: 16,
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1a1a2e),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: _getCurrentLocation,
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF4299e1),
-                        width: 2,
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.my_location,
-                      color: Color(0xFF4299e1),
-                      size: 24,
-                    ),
-                  ),
-                ),
+            child: FloatingActionButton(
+              onPressed: _goToMyLocation,
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF1565C0),
+              elevation: 4,
+              mini: false,
+              child: const Icon(
+                Icons.my_location,
+                size: 24,
               ),
             ),
           ),

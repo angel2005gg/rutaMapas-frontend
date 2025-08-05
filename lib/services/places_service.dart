@@ -2,10 +2,22 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+// ✅ AGREGAR CACHE AL INICIO DE LA CLASE PlacesService:
 class PlacesService {
-  // ✅ VERIFICAR QUE SEA LA MISMA API KEY
   static const String _apiKey = 'AIzaSyCP1xS8HLdxQe-a1KeuXGQzaVIqoQvKmYo';
   static const String _baseUrl = 'https://maps.googleapis.com/maps/api/place';
+  
+  // ✅ NUEVO: Cache simple para evitar requests repetidos
+  static final Map<String, List<Map<String, dynamic>>> _cache = {};
+  static DateTime? _lastCacheTime;
+  
+  // ✅ MÉTODO PARA VERIFICAR CACHE
+  static bool _isCacheValid() {
+    if (_lastCacheTime == null) return false;
+    final now = DateTime.now();
+    final difference = now.difference(_lastCacheTime!).inMinutes;
+    return difference < 5; // Cache válido por 5 minutos
+  }
 
   // ✅ AGREGAR ESTE MÉTODO QUE FALTA
   static Future<void> testPlacesAPI() async {
@@ -39,6 +51,13 @@ class PlacesService {
     required String tipo,
     int radio = 1500, // ✅ REDUCIR radio para resultados más cercanos
   }) async {
+    // ✅ VERIFICAR CACHE ANTES DE HACER LA PETICIÓN
+    final cacheKey = '${ubicacion.latitude},${ubicacion.longitude}-$tipo-$radio';
+    if (_isCacheValid() && _cache.containsKey(cacheKey)) {
+      print('📦 Usando datos de cache para $cacheKey');
+      return _cache[cacheKey]!;
+    }
+
     try {
       final url = '$_baseUrl/nearbysearch/json?'
           'location=${ubicacion.latitude},${ubicacion.longitude}&'
@@ -61,6 +80,11 @@ class PlacesService {
         if (data['status'] == 'OK') {
           final results = List<Map<String, dynamic>>.from(data['results']);
           print('✅ $tipo: ${results.length} lugares encontrados');
+          
+          // ✅ ALMACENAR EN CACHE
+          _cache[cacheKey] = results;
+          _lastCacheTime = DateTime.now();
+          
           return results;
         } else {
           print('❌ API Error: ${data['status']} - ${data['error_message'] ?? 'Sin mensaje'}');
@@ -80,27 +104,24 @@ class PlacesService {
   // ✅ SIMPLIFICAR tipos para test inicial
   static Future<Map<String, List<Map<String, dynamic>>>> buscarLugaresComerciales({
     required LatLng ubicacion,
-    int radio = 1500, // ✅ Radio más pequeño
+    int radio = 3000, // ✅ AUMENTAR de 1000 a 3000 metros
   }) async {
-    // ✅ EMPEZAR SOLO CON ALGUNOS TIPOS PARA TESTING
+    // ✅ AGREGAR MÁS CATEGORÍAS como Google Maps
     final tiposLugares = {
-      'restaurantes': 'restaurant',
       'gasolineras': 'gas_station',
+      'restaurantes': 'restaurant',
       'bancos': 'bank',
-      // ✅ Comentar los demás hasta que funcionen estos
-      // 'hoteles': 'lodging',
-      // 'farmacias': 'pharmacy', 
-      // 'supermercados': 'supermarket',
-      // 'hospitales': 'hospital',
-      // 'centros_comerciales': 'shopping_mall',
-      // 'tiendas': 'store',
+      'supermercados': 'supermarket',
+      'farmacias': 'pharmacy',
+      'hospitales': 'hospital',
+      // 'hoteles': 'lodging', // Opcional
     };
 
     Map<String, List<Map<String, dynamic>>> resultados = {};
 
     print('🌍 Buscando lugares cerca de: ${ubicacion.latitude}, ${ubicacion.longitude}');
+    print('💰 Costo estimado: ${tiposLugares.length * 0.032} USD por búsqueda');
 
-    // ✅ BUSCAR cada tipo con delay más corto
     for (var entry in tiposLugares.entries) {
       print('🔍 Buscando: ${entry.key}...');
       
@@ -111,81 +132,133 @@ class PlacesService {
       );
       
       if (lugares.isNotEmpty) {
-        resultados[entry.key] = lugares;
-        print('✅ ${entry.key}: ${lugares.length} lugares agregados');
+        // ✅ AUMENTAR de 2 a 5 lugares por categoría
+        resultados[entry.key] = lugares.take(5).toList();
+        print('✅ ${entry.key}: ${lugares.take(5).length} lugares agregados');
       } else {
         print('⚠️ ${entry.key}: No se encontraron lugares');
       }
       
-      // ✅ Delay más corto para no saturar
+      // ✅ Delay más corto para cargar más rápido
       await Future.delayed(const Duration(milliseconds: 50));
     }
 
     print('🎯 Total de categorías con resultados: ${resultados.length}');
+    print('📊 Total de lugares: ${resultados.values.fold(0, (sum, list) => sum + list.length)}');
+    
     return resultados;
   }
 
-  // ✅ Convertir resultado de Places API a marcador
-  static Marker crearMarcadorDeLugar({
+  // ✅ REEMPLAZAR el método crearMarcadorDeLugar por esta versión con burbuja personalizada:
+  static Future<Marker> crearMarcadorDeLugarConBurbuja({
     required Map<String, dynamic> lugar,
     required String categoria,
-  }) {
+  }) async {
     final geometry = lugar['geometry'];
     final location = geometry['location'];
     final lat = location['lat'];
     final lng = location['lng'];
+    final nombre = lugar['name'] ?? 'Sin nombre';
+    
+    // ✅ CREAR ICONO PERSONALIZADO CON BURBUJA + TEXTO + ICONO
+    final BitmapDescriptor iconoPersonalizado = await _crearIconoConBurbuja(
+      nombre: nombre,
+      categoria: categoria,
+      rating: lugar['rating'],
+    );
     
     return Marker(
       markerId: MarkerId('${categoria}_${lugar['place_id']}'),
       position: LatLng(lat, lng),
-      infoWindow: InfoWindow(
-        title: lugar['name'] ?? 'Sin nombre',
-        snippet: _obtenerSnippet(lugar, categoria),
-      ),
-      icon: _obtenerIconoPorCategoria(categoria),
+      icon: iconoPersonalizado,
+      // ✅ SIN InfoWindow porque ya está en la burbuja
+      onTap: () {
+        print('📍 Tapped: $nombre');
+        // Aquí puedes agregar lógica adicional si necesitas
+      },
     );
   }
 
-  // ✅ Obtener snippet (descripción corta) del lugar
-  static String _obtenerSnippet(Map<String, dynamic> lugar, String categoria) {
-    String snippet = _obtenerNombreCategoria(categoria);
+  // ✅ NUEVO: Método para crear icono personalizado con burbuja
+  static Future<BitmapDescriptor> _crearIconoConBurbuja({
+    required String nombre,
+    required String categoria,
+    double? rating,
+  }) async {
+    // Por ahora usaremos iconos básicos de Google Maps con colores
+    // En el futuro se puede implementar CustomPainter para burbujas reales
     
-    // Agregar rating si existe
-    if (lugar['rating'] != null) {
-      snippet += ' • ⭐ ${lugar['rating']}';
-    }
+    final emoji = _obtenerEmojiCategoria(categoria);
+    final color = _obtenerColorCategoria(categoria);
     
-    // Agregar estado si está abierto
-    if (lugar['opening_hours'] != null && lugar['opening_hours']['open_now'] != null) {
-      snippet += lugar['opening_hours']['open_now'] ? ' • Abierto' : ' • Cerrado';
-    }
-    
-    return snippet;
+    // Para esta implementación, usaremos el marcador con color personalizado
+    return BitmapDescriptor.defaultMarkerWithHue(color);
   }
 
-  // ✅ Obtener ícono según la categoría
-  static BitmapDescriptor _obtenerIconoPorCategoria(String categoria) {
+  // ✅ NUEVO: Obtener color para cada categoría
+  static double _obtenerColorCategoria(String categoria) {
+    switch (categoria) {
+      case 'restaurantes': return BitmapDescriptor.hueOrange;  // Naranja
+      case 'gasolineras': return BitmapDescriptor.hueBlue;     // Azul
+      case 'bancos': return BitmapDescriptor.hueYellow;        // Amarillo
+      case 'supermercados': return BitmapDescriptor.hueGreen;  // Verde
+      case 'farmacias': return BitmapDescriptor.hueGreen;      // Verde
+      case 'hospitales': return BitmapDescriptor.hueRed;       // Rojo
+      default: return BitmapDescriptor.hueViolet;              // Morado
+    }
+  }
+
+  // ✅ MODIFICAR el método original para que use la nueva versión:
+  static Future<Marker> crearMarcadorDeLugar({
+    required Map<String, dynamic> lugar,
+    required String categoria,
+  }) async {
+    return await crearMarcadorDeLugarConBurbuja(
+      lugar: lugar,
+      categoria: categoria,
+    );
+  }
+
+  // ✅ NUEVO: Snippet simple como Google Maps
+  static String _obtenerSnippetSimple(Map<String, dynamic> lugar, String categoria) {
+    List<String> info = [];
+    
+    // Solo emoji + rating si existe
+    final emoji = _obtenerEmojiCategoria(categoria);
+    info.add(emoji);
+    
+    // Rating simple
+    if (lugar['rating'] != null) {
+      final rating = lugar['rating'].toString();
+      info.add('⭐ $rating');
+    }
+    
+    // Estado simple
+    if (lugar['opening_hours'] != null && lugar['opening_hours']['open_now'] != null) {
+      final abierto = lugar['opening_hours']['open_now'];
+      info.add(abierto ? 'Abierto' : 'Cerrado');
+    }
+    
+    return info.join(' • ');
+  }
+
+  // ✅ NUEVO: Iconos más parecidos a Google Maps
+  static BitmapDescriptor _obtenerIconoEstiloGoogle(String categoria) {
     switch (categoria) {
       case 'restaurantes':
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange); // Naranja
       case 'gasolineras':
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue);
-      case 'hoteles':
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan);
-      case 'farmacias':
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue);   // Azul
       case 'bancos':
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow);
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow); // Amarillo
       case 'supermercados':
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta);
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);  // Verde
+      case 'farmacias':
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);  // Verde
       case 'hospitales':
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
-      case 'centros_comerciales':
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet);
-      case 'tiendas':
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose);
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);    // Rojo
       default:
-        return BitmapDescriptor.defaultMarker;
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet); // Morado por defecto
     }
   }
 
@@ -202,6 +275,91 @@ class PlacesService {
       case 'centros_comerciales': return 'Centro Comercial';
       case 'tiendas': return 'Tienda';
       default: return 'Lugar';
+    }
+  }
+
+  // ✅ NUEVO: Búsqueda por texto usando Google Places Text Search
+  static Future<List<Map<String, dynamic>>> buscarLugaresPorTexto({
+    required String consulta,
+    LatLng? ubicacionActual,
+    int radio = 5000,
+  }) async {
+    try {
+      // Preparar URL para Text Search
+      String url = '$_baseUrl/textsearch/json?'
+          'query=${Uri.encodeComponent(consulta)}&'
+          'key=$_apiKey';
+      
+      // Si hay ubicación actual, agregar bias de ubicación
+      if (ubicacionActual != null) {
+        url += '&location=${ubicacionActual.latitude},${ubicacionActual.longitude}'
+            '&radius=$radio';
+      }
+
+      print('🔍 Búsqueda de texto: $consulta');
+      print('🔗 URL: $url');
+
+      final response = await http.get(Uri.parse(url));
+      
+      print('📱 Status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        print('📊 Response status: ${data['status']}');
+        print('📍 Resultados encontrados: ${data['results']?.length ?? 0}');
+        
+        if (data['status'] == 'OK') {
+          final results = List<Map<String, dynamic>>.from(data['results']);
+          
+          // Convertir resultados al formato esperado
+          List<Map<String, dynamic>> lugaresFormateados = [];
+          
+          for (var lugar in results.take(5)) { // Máximo 5 resultados
+            final geometry = lugar['geometry'];
+            final location = geometry['location'];
+            final coordenadas = LatLng(location['lat'], location['lng']);
+            
+            lugaresFormateados.add({
+              'nombre': lugar['name'] ?? 'Sin nombre',
+              'direccion': lugar['formatted_address'] ?? 'Dirección no disponible',
+              'coordenadas': coordenadas,
+              'rating': lugar['rating'],
+              'tipo': (lugar['types'] as List?)?.join(',') ?? 'lugar',
+            });
+          }
+          
+          print('✅ Búsqueda texto: ${lugaresFormateados.length} lugares formateados');
+          return lugaresFormateados;
+        } else {
+          print('❌ API Error: ${data['status']} - ${data['error_message'] ?? 'Sin mensaje'}');
+        }
+      } else {
+        print('❌ HTTP Error: ${response.statusCode}');
+        print('❌ Response: ${response.body}');
+      }
+      
+      return [];
+    } catch (e) {
+      print('❌ Exception en buscarLugaresPorTexto: $e');
+      return [];
+    }
+  }
+
+  // ✅ AGREGAR ESTOS MÉTODOS al final de la clase PlacesService:
+
+  // ✅ NUEVO: Emojis para categorías
+  static String _obtenerEmojiCategoria(String categoria) {
+    switch (categoria) {
+      case 'restaurantes': return '🍽️';
+      case 'gasolineras': return '⛽';
+      case 'bancos': return '🏦';
+      case 'hoteles': return '🏨';
+      case 'farmacias': return '💊';
+      case 'supermercados': return '🛒';
+      case 'hospitales': return '🏥';
+      case 'talleres': return '🔧';
+      default: return '📍';
     }
   }
 }
