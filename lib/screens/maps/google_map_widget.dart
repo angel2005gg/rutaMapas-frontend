@@ -30,11 +30,7 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
   Set<Polyline> _polylines = {};
   String? _rutaInfo;
   bool _mostrandoRuta = false;
-  
-  // ✅ NUEVA VARIABLE para tipo de mapa
   MapType _currentMapType = MapType.normal;
-
-  static const LatLng _initialPosition = LatLng(3.4968807, -76.5192206);
 
   static const String _colorfulMapStyle = '''
 [
@@ -270,12 +266,14 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
           _isLoading = false;
         });
         
+        // ✅ CAMBIO: Centrar automáticamente cuando se obtiene la ubicación
         if (_mapController != null) {
+          print('🎯 Centrando mapa en ubicación obtenida');
           await _mapController!.animateCamera(
             CameraUpdate.newCameraPosition(
               CameraPosition(
                 target: LatLng(position.latitude, position.longitude),
-                zoom: 16.0,
+                zoom: 14.0, // ✅ CAMBIO: De 16.0 a 14.0 (más alejado al cargar)
                 tilt: 0,
                 bearing: 0,
               ),
@@ -300,23 +298,15 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
     }
   }
 
+  // ✅ CAMBIAR TODO ESTE MÉTODO:
   void _updateLocationMarker() {
-    if (_currentPosition == null) return;
-    
-    final locationMarker = Marker(
-      markerId: const MarkerId('current_location'),
-      position: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-      infoWindow: const InfoWindow(
-        title: 'Tu ubicación',
-        snippet: 'Aquí estás',
-      ),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-    );
-    
+    // ✅ YA NO CREAR MARCADOR ROJO - Google Maps mostrará el punto azul automáticamente
+    // Solo limpiar cualquier marcador de ubicación anterior si existe
     setState(() {
       _allMarkers.removeWhere((marker) => marker.markerId.value == 'current_location');
-      _allMarkers.add(locationMarker);
     });
+    
+    print('✅ Ubicación actualizada - Google Maps mostrará punto azul nativo');
   }
 
   Future<void> _cargarLugaresComerciales() async {
@@ -334,8 +324,8 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
       
       Set<Marker> nuevosMarcadores = {};
       
-      _updateLocationMarker();
-      nuevosMarcadores.addAll(_allMarkers.where((m) => m.markerId.value == 'current_location'));
+      // ✅ CAMBIO: Ya no agregar marcador de ubicación porque Google Maps lo maneja
+      _updateLocationMarker(); // Solo limpia marcadores antiguos
       
       print('🎯 Total de categorías con resultados: ${lugaresComerciales.length}');
       
@@ -401,16 +391,8 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
           patterns: [],
         );
 
-        final marcadorOrigen = Marker(
-          markerId: const MarkerId('origen_ruta'),
-          position: origen,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-          infoWindow: const InfoWindow(
-            title: 'Tu ubicación',
-            snippet: 'Punto de inicio',
-          ),
-        );
-
+        // ✅ CAMBIO: NO crear marcador de origen porque Google Maps ya muestra el punto azul
+        // Solo crear marcador de destino
         final marcadorDestino = Marker(
           markerId: const MarkerId('destino_ruta'),
           position: destino,
@@ -423,7 +405,7 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
 
         setState(() {
           _polylines = {polyline};
-          _allMarkers = {marcadorOrigen, marcadorDestino};
+          _allMarkers = {marcadorDestino}; // ✅ SOLO marcador de destino
           _rutaInfo = rutaData['resumen'];
           _mostrandoRuta = true;
         });
@@ -486,21 +468,31 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
   }
 
   // ✅ NUEVO: Método para ir a mi ubicación
-  void _goToMyLocation() async {
+  Future<void> _goToMyLocation() async {
     if (_currentPosition != null && _mapController != null) {
+      print('📍 Centrando en mi ubicación: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}');
+    
       await _mapController!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-            zoom: 17.0,
+            zoom: 14.0, // ✅ CAMBIO: De 17.0 a 26.0 (el doble de zoom)
             tilt: 0,
             bearing: 0,
           ),
         ),
       );
+    
+      print('✅ Mapa centrado en mi ubicación actual');
     } else {
+      print('🔄 No hay ubicación disponible, obteniendo ubicación...');
       // Si no hay ubicación, intentar obtenerla de nuevo
-      _getCurrentLocation();
+      await _getCurrentLocation();
+    
+      // Después de obtener la ubicación, centrar automáticamente
+      if (_currentPosition != null && _mapController != null) {
+        await _goToMyLocation(); // ✅ AHORA SÍ FUNCIONA CON await
+      }
     }
   }
 
@@ -534,17 +526,18 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
         // ✅ GOOGLE MAPS
         GoogleMap(
           initialCameraPosition: CameraPosition(
+            // ✅ CAMBIO: Solo usar ubicación real, sin por defecto
             target: _currentPosition != null 
                 ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
-                : _initialPosition,
-            zoom: 15.0,
+                : const LatLng(0, 0),
+            zoom: _currentPosition != null ? 13.0 : 2.0, // ✅ CAMBIO: De 15.0 a 13.0 (más alejado)
           ),
           onMapCreated: (GoogleMapController controller) {
             _mapController = controller;
             _mapController!.setMapStyle(_colorfulMapStyle);
             print('✅ Mapa creado exitosamente con estilo colorido');
           },
-          myLocationEnabled: false,
+          myLocationEnabled: true,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
           compassEnabled: true,
@@ -552,10 +545,13 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
           markers: _allMarkers,
           polylines: _polylines,
           mapType: _currentMapType,
-          // ✅ NUEVA LÍNEA: Empuja todos los controles hacia abajo
+          // ✅ PADDING AJUSTADO PARA PUNTO AZUL MÁS GRANDE
           padding: const EdgeInsets.only(
-            top: 600
-          ), // 120px desde arriba
+            top: 120,
+            bottom: 160,
+            left: 20,
+            right: 20, // ✅ AGREGAR padding derecho para mejor balance
+          ),
         ),
         
         // ✅ LOADING OVERLAY (sin cambios)

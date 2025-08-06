@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
+import 'screens/splash_screen.dart'; // ✅ NUEVO IMPORT
 import 'screens/login_screen.dart';
 import 'screens/verify_code_screen.dart';
 import 'screens/dashboard_screen.dart';
-import 'screens/maps_screen.dart';
-import 'screens/community_screen.dart';
-import 'screens/profile_screen.dart';
 import 'screens/comunidades/comunidades_screen.dart';
 import 'screens/comunidades/crear_comunidad_screen.dart';
 import 'screens/comunidades/unirse_comunidad_screen.dart';
@@ -14,33 +12,24 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ruta Map Frontend',
-      debugShowCheckedModeBanner: false, // Quita la bandera de DEBUG
+      title: 'Mapas Rutas',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1565C0), // Azul elegante
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1565C0), // Azul para AppBar
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      initialRoute: '/login',
+      // ✅ CAMBIO: Iniciar con splash en lugar de login
+      initialRoute: '/',
       routes: {
+        '/': (context) => const SplashScreen(), // ✅ NUEVA RUTA INICIAL
         '/login': (context) => const LoginScreen(),
         '/verify-code': (context) => const VerifyCodeScreen(),
         '/dashboard': (context) => const DashboardScreen(),
-        '/maps': (context) => const MapsScreen(),
-        '/community': (context) => const CommunityScreen(),
-        '/profile': (context) => const ProfileScreen(),
         '/comunidades': (context) => const ComunidadesScreen(),
         '/crear-comunidad': (context) => const CrearComunidadScreen(),
         '/unirse-comunidad': (context) => const UnirseComunidadScreen(),

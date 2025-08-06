@@ -200,9 +200,68 @@ class AuthService {
     }
   }
 
-  // MÉTODO EXISTENTE (NO CAMBIAR)
-  Future<void> logout() async {
+  // ✅ AGREGAR ESTE MÉTODO AL AuthService (después de getCurrentUser)
+  Future<bool> hasValidSession() async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        print('🔍 No hay token guardado');
+        return false;
+      }
+
+      print('🔍 Token encontrado, verificando validez...');
+      
+      // Verificar que el token funcione haciendo una llamada al usuario
+      final response = await http.get(
+        Uri.parse(ApiConfig.userUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final userData = json.decode(response.body);
+        if (userData['status'] == 'success') {
+          print('✅ Sesión válida confirmada');
+          return true;
+        }
+      }
+      
+      print('❌ Token inválido o expirado');
+      // Si el token no es válido, eliminarlo
+      await storage.delete(key: 'token');
+      return false;
+      
+    } catch (e) {
+      print('❌ Error verificando sesión: $e');
+      return false;
+    }
+  }
+
+  // // MÉTODO EXISTENTE (NO CAMBIAR)
+  // Future<void> logout() async {
+  //   await _googleSignIn.signOut();
+  //   await storage.delete(key: 'token');
+  // }
+
+  // ✅ MANTENER SOLO ESTE (el completo):
+Future<void> logout() async {
+  try {
+    // Cerrar sesión de Google si existe
     await _googleSignIn.signOut();
+    
+    // Eliminar token guardado
+    await storage.delete(key: 'token');
+    
+    // Limpiar cualquier otro dato guardado (opcional)
+    await storage.deleteAll();
+    
+    print('✅ Logout completo realizado');
+  } catch (e) {
+    print('❌ Error en logout: $e');
+    // Aún así eliminar el token
     await storage.delete(key: 'token');
   }
+}
 }
