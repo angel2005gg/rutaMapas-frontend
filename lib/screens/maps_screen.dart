@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'maps/google_map_widget.dart';
 import '../widgets/floating_search_widget.dart';
 import '../widgets/navigation_bottom_sheet.dart'; // ✅ NUEVO IMPORT
+import '../screens/navigation_screen.dart'; // NUEVO IMPORT PARA LA NAVEGACIÓN
 
 class MapsScreen extends StatefulWidget {
   const MapsScreen({Key? key}) : super(key: key);
@@ -53,13 +54,24 @@ class _MapsScreenState extends State<MapsScreen> {
     });
   }
 
-  // ✅ NUEVO: Método para comenzar navegación
+  // ✅ MODIFICAR EL MÉTODO _onComenzarNavegacion:
   void _onComenzarNavegacion() {
-    // Aquí puedes implementar lógica adicional para navegación paso a paso
-    print('🧭 Comenzando navegación hacia $_nombreDestino');
-    
-    // Por ejemplo, abrir Google Maps nativo
-    // O implementar navegación paso a paso en la app
+    if (_coordenadasDestino != null && _nombreDestino != null) {
+      // Obtener puntos de ruta del GoogleMapWidget
+      final puntosRuta = (_mapKey.currentState as dynamic)?.puntosRutaActual ?? [_coordenadasDestino!];
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => NavigationScreen(
+            destino: _coordenadasDestino!,
+            nombreDestino: _nombreDestino!,
+            puntosRuta: puntosRuta,
+            rutaInfo: _rutaInfo ?? '',
+          ),
+        ),
+      );
+    }
   }
 
   @override

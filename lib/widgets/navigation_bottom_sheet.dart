@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../screens/navigation_screen.dart'; // NUEVO IMPORT PARA LA NAVEGACIÓN
 
 class NavigationBottomSheet extends StatefulWidget {
   final String? rutaInfo;
@@ -417,5 +418,29 @@ class _NavigationBottomSheetState extends State<NavigationBottomSheet>
         ),
       ],
     );
+  }
+  
+  // ✅ CAMBIAR ESTE MÉTODO en navigation_bottom_sheet.dart:
+  void _onComenzarNavegacion() {
+    if (widget.coordenadasDestino != null && widget.nombreDestino != null) {
+      // Obtener puntos de ruta del widget padre
+      // Por ahora usaremos una ruta simple
+      final puntosRuta = [
+        // Aquí deberías pasar los puntos de ruta reales desde GoogleMapWidget
+        widget.coordenadasDestino!,
+      ];
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => NavigationScreen(
+            destino: widget.coordenadasDestino!,
+            nombreDestino: widget.nombreDestino!,
+            puntosRuta: puntosRuta,
+            rutaInfo: widget.rutaInfo ?? '',
+          ),
+        ),
+      );
+    }
   }
 }
