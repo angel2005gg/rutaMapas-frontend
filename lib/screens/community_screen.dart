@@ -34,15 +34,16 @@ class _CommunityScreenState extends State<CommunityScreen> {
   @override
   void initState() {
     super.initState();
+    print('🏘️ CommunityScreen initState ejecutado');
     _cargarMisComunidades();
   }
 
   @override
   void didUpdateWidget(CommunityScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _cargarMisComunidades();
-    });
+    print('🏘️ CommunityScreen didUpdateWidget ejecutado');
+    // ✅ ELIMINAR TODA LA LÓGICA DE RECARGA AUTOMÁTICA
+    // Esto evitará los errores de frames y reconstrucciones innecesarias
   }
 
   Future<void> _cargarMisComunidades() async {

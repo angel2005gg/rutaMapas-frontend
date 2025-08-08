@@ -21,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserData();
   }
 
+  // ✅ MODIFICAR ESTE MÉTODO COMPLETO:
   Future<void> _loadUserData() async {
     setState(() {
       _isLoading = true;
@@ -31,8 +32,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final userData = await _authService.getCurrentUser();
       
       if (userData != null) {
-        print('Datos recibidos: $userData'); // Para debug
+        // ✅ AGREGAR DEBUG ESPECÍFICO PARA VER QUÉ LLEGA
+        print('📊 Datos completos recibidos en perfil: $userData');
+        
         final user = UserModel.fromJson(userData);
+        
+        // ✅ DEBUG ESPECÍFICO PARA LA RACHA
+        print('👤 Usuario procesado en perfil:');
+        print('   - Nombre: ${user.nombre}');
+        print('   - Racha Actual: ${user.rachaActual}');
+        print('   - Clasificación ID: ${user.clasificacionId}');
+        print('   - Clasificación Nombre: ${_getNombreClasificacion(user.clasificacionId)}');
+        
+        // ✅ VERIFICAR DATOS RAW TAMBIÉN
+        final rawUserData = userData['user'] ?? userData;
+        print('🔍 Datos RAW de racha: ${rawUserData['racha_actual']}');
+        
         setState(() {
           _user = user;
           _isLoading = false;
@@ -44,7 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (e) {
-      print('Error al cargar datos del usuario: $e');
+      print('❌ Error al cargar datos del usuario: $e');
       setState(() {
         _errorMessage = 'Error al cargar datos: ${e.toString()}';
         _isLoading = false;
@@ -174,6 +189,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // ✅ Método para obtener nombre de clasificación
+  String _getNombreClasificacion(int clasificacionId) {
+    switch (clasificacionId) {
+      case 1:
+        return 'Tornillo Oxidado';
+      case 2:
+        return 'Tuerca de Bronce';
+      case 3:
+        return 'Pistón Plateado';
+      case 4:
+        return 'Turbo Dorado';
+      case 5:
+        return 'Copa Pistón';
+      default:
+        return 'Sin clasificar';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -189,7 +222,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Text(
                 'Cargando perfil...',
                 style: TextStyle(
-                  color: Colors.grey,
                   fontSize: 16,
                 ),
               ),
@@ -212,7 +244,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Error al cargar datos del usuario',
+                'Error al cargar perfil',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -220,19 +252,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                _errorMessage ?? 'No se pudieron cargar los datos del perfil',
-                style: const TextStyle(
-                  color: Colors.grey,
-                ),
+                _errorMessage ?? 'Error desconocido',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _loadUserData,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1565C0),
-                  foregroundColor: Colors.white,
-                ),
                 child: const Text('Reintentar'),
               ),
             ],
@@ -243,96 +268,130 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              const SizedBox(height: 20),
-              
-              // ✅ Avatar inteligente (foto real o iniciales)
-              _buildProfileAvatar(),
-              const SizedBox(height: 20),
-              
-              // Nombre inteligente
-              Text(
-                _user!.nombre == 'Usuario' ? 'Usuario Anónimo' : _user!.nombre,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1565C0),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              
-              // Email
-              Text(
-                _user!.correo,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              
-              const SizedBox(height: 30),
-              
-              // Estadísticas
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'Estadísticas',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildStatItem(
-                            'Racha Actual',
-                            '${_user!.rachaActual}',
-                            Icons.local_fire_department,
-                            Colors.orange,
-                          ),
-                          _buildStatItem(
-                            'Clasificación',
-                            _user!.clasificacionId == 0 ? 'Sin clasificar' : '${_user!.clasificacionId}',
-                            Icons.emoji_events,
-                            Colors.amber,
-                          ),
-                        ],
-                      ),
-                    ],
+        child: RefreshIndicator( // ✅ NUEVO: Agregar RefreshIndicator
+          onRefresh: _loadUserData, // ✅ NUEVO: Conectar con método de carga
+          color: const Color(0xFF1565C0), // ✅ Color del indicador
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(), // ✅ IMPORTANTE: Para que funcione el pull-to-refresh
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                
+                // ✅ Avatar inteligente (foto real o iniciales)
+                _buildProfileAvatar(),
+                const SizedBox(height: 20),
+                
+                // Nombre inteligente
+                Text(
+                  _user!.nombre.isNotEmpty ? _user!.nombre : 'Usuario',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1565C0),
                   ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 30),
-              
-              // Botón de cerrar sesión
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _handleLogout,
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Cerrar Sesión'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                const SizedBox(height: 8),
+                
+                // Email
+                Text(
+                  _user!.correo,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                
+                const SizedBox(height: 30),
+                
+                // Estadísticas
+                Card(
+                  elevation: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Estadísticas',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [ // ✅ QUITAR mainAxisAlignment
+                            _buildStatItem(
+                              'Racha Actual',
+                              '${_user!.rachaActual} días', // ✅ AGREGAR "días" para claridad
+                              Icons.local_fire_department,
+                              Colors.orange,
+                            ),
+                            const SizedBox(width: 16), // ✅ SEPARADOR fijo entre columnas
+                            _buildStatItem(
+                              'Clasificación',
+                              _getNombreClasificacion(_user!.clasificacionId),
+                              Icons.emoji_events,
+                              Colors.amber,
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 30),
+                
+                // // ✅ NUEVO: Indicador de actualización
+                // Container(
+                //   padding: const EdgeInsets.all(12),
+                //   decoration: BoxDecoration(
+                //     color: Colors.blue[50],
+                //     borderRadius: BorderRadius.circular(8),
+                //     border: Border.all(color: Colors.blue[200]!),
+                //   ),
+                //   child: Row(
+                //     mainAxisSize: MainAxisSize.min,
+                //     children: [
+                //       Icon(
+                //         Icons.refresh,
+                //         color: Colors.blue[600],
+                //         size: 16,
+                //       ),
+                //       const SizedBox(width: 8),
+                //       Text(
+                //         'Desliza hacia abajo para actualizar',
+                //         style: TextStyle(
+                //           fontSize: 12,
+                //           color: Colors.blue[700],
+                //         ),
+                //       ),
+                //     ],
+                //   ),
+                // ),
+                // const SizedBox(height: 20),
+                
+                // Botón de cerrar sesión
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _handleLogout,
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Cerrar Sesión'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -340,25 +399,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildStatItem(String title, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Icon(icon, size: 40, color: color),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
+    return Expanded( // ✅ NUEVO: Expandir para usar todo el espacio disponible
+      child: Column(
+        children: [
+          Icon(icon, size: 40, color: color),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 22, // ✅ REDUCIR tamaño para nombres largos
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center, // ✅ CENTRAR texto
+            maxLines: 2, // ✅ PERMITIR hasta 2 líneas
+            overflow: TextOverflow.ellipsis, // ✅ PUNTOS suspensivos si es muy largo
           ),
-        ),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Colors.grey,
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 12, // ✅ REDUCIR tamaño del título
+              color: Colors.grey,
+            ),
+            textAlign: TextAlign.center, // ✅ CENTRAR texto
+            maxLines: 1, // ✅ SOLO 1 línea para el título
+            overflow: TextOverflow.ellipsis, // ✅ PUNTOS suspensivos
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

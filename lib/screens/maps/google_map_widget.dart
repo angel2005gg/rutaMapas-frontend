@@ -11,6 +11,7 @@ import '../../widgets/map_type_selector.dart';
 import '../../widgets/map_view_toggle.dart'; // ✅ NUEVO IMPORT
 import '../../widgets/center_location_button.dart'; // ✅ NUEVO IMPORT
 // import '../../widgets/route_time_widget.dart';
+import '../../widgets/safety_warning_widget.dart';
 class GoogleMapWidget extends StatefulWidget {
   final Function(String)? onRutaCalculada;
 
@@ -852,6 +853,19 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
                 Icons.my_location,
                 size: 20,
               ),
+            ),
+          ),
+        
+        // ✅ WIDGET DE ADVERTENCIA DE SEGURIDAD
+        if (!_isLoading && _errorMessage.isEmpty)
+          Positioned(
+            top: 180, // ✅ Posición en la parte superior izquierda
+            left: 16,
+            child: SafetyWarningWidget(
+              onWarningRead: () {
+                print('📋 Usuario leyó la advertencia de seguridad');
+                // ✅ AQUÍ LUEGO AGREGAREMOS LA LÓGICA DE PUNTOS
+              },
             ),
           ),
       ],

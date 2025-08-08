@@ -21,13 +21,22 @@ class UserModel {
     // El JSON viene con estructura {"status": "success", "user": {...}}
     final userData = json['user'] ?? json;
     
+    // ✅ AGREGAR DEBUG ESPECÍFICO PARA RACHA
+    print('🔍 UserModel.fromJson - datos recibidos:');
+    print('   - userData completo: $userData');
+    print('   - racha_actual raw: ${userData['racha_actual']}');
+    print('   - racha_actual tipo: ${userData['racha_actual'].runtimeType}');
+    
+    final rachaActual = userData['racha_actual'] ?? 0;
+    print('   - racha_actual procesada: $rachaActual');
+    
     return UserModel(
       id: userData['id'],
-      nombre: userData['nombre'] ?? 'Usuario', // Por si viene null
+      nombre: userData['nombre'] ?? 'Usuario',
       correo: userData['correo'],
-      fotoPerfil: userData['foto_perfil'], // Puede ser null
-      googleUid: userData['google_uid'],   // ➕ NUEVO: Puede ser null
-      rachaActual: userData['racha_actual'] ?? 0,
+      fotoPerfil: userData['foto_perfil'],
+      googleUid: userData['google_uid'],
+      rachaActual: rachaActual, // ✅ Usar variable procesada
       clasificacionId: userData['clasificacion_id'] ?? 0,
     );
   }

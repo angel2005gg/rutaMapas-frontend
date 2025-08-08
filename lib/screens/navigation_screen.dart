@@ -5,6 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart'; // ✅ NUEVO
 import 'dart:async';
 import '../widgets/map_view_toggle.dart'; // ✅ NUEVO IMPORT
 import '../widgets/center_location_button.dart'; // ✅ NUEVO IMPORT
+// ✅ AGREGAR ESTOS IMPORTS AL INICIO
+import '../services/points_service.dart';
+import '../widgets/points_animation_widget.dart'; 
+import 'package:flutter/services.dart';
 
 class NavigationScreen extends StatefulWidget {
   final LatLng destino;
@@ -24,7 +28,8 @@ class NavigationScreen extends StatefulWidget {
   State<NavigationScreen> createState() => _NavigationScreenState();
 }
 
-class _NavigationScreenState extends State<NavigationScreen> {
+class _NavigationScreenState extends State<NavigationScreen> 
+    with WidgetsBindingObserver { // ✅ AGREGAR ESTE MIXIN
   GoogleMapController? _mapController;
   Position? _currentPosition;
   StreamSubscription<Position>? _positionStream;
@@ -38,18 +43,105 @@ class _NavigationScreenState extends State<NavigationScreen> {
   bool _isFollowingUser = true; // Por defecto SIEMPRE siguiendo en navegación
   StreamSubscription<Position>? _locationSubscription;
 
+  // ✅ AGREGAR DESPUÉS DE LAS VARIABLES EXISTENTES:
+  // Variables para puntos
+  bool _mostrandoAnimacionPuntos = false;
+  int _puntosAnimacion = 0;
+  bool _puntosPositivos = true;
+  String? _motivoPuntos;
+  bool _puntosInicioOtorgados = false; // Para dar puntos solo 1 vez al iniciar
+
+  // ✅ NUEVAS VARIABLES para detección de salida:
+  bool _appEnPrimerPlano = true;
+  DateTime? _tiempoSalidaApp;
+  bool _navegacionActiva = false;
+
   @override
   void initState() {
     super.initState();
     _loadPreferences();
     _iniciarNavegacion();
+    
+    // ✅ AGREGAR: Registrar observer para detectar cambios de app
+    WidgetsBinding.instance.addObserver(this);
+    _navegacionActiva = true;
   }
 
   @override
   void dispose() {
     _positionStream?.cancel();
     _locationSubscription?.cancel();
+    
+    // ✅ AGREGAR: Quitar observer
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  // ✅ NUEVO: Detectar cambios en el estado de la app
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    if (!_navegacionActiva) return; // Solo si está navegando
+    
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        // ✅ APP PASÓ A SEGUNDO PLANO
+        if (_appEnPrimerPlano) {
+          _appEnPrimerPlano = false;
+          _tiempoSalidaApp = DateTime.now();
+          _restarPuntosPorSalida();
+          print('📱 App pasó a segundo plano - restando puntos');
+        }
+        break;
+        
+      case AppLifecycleState.resumed:
+        // ✅ APP VOLVIÓ AL PRIMER PLANO
+        if (!_appEnPrimerPlano) {
+          _appEnPrimerPlano = true;
+          _mostrarNotificacionRegreso();
+          print('📱 App volvió al primer plano');
+        }
+        break;
+        
+      case AppLifecycleState.hidden:
+        // No hacer nada especial
+        break;
+    }
+  }
+
+  // ✅ NUEVO: Restar puntos por salir de la app
+  Future<void> _restarPuntosPorSalida() async {
+    try {
+      final result = await PointsService.restarPuntosSalidaApp();
+      
+      if (result['status'] == 'success') {
+        print('❌ Puntos restados por salir: ${result['puntos_cambio']}');
+        // Los puntos se mostrarán cuando regrese a la app
+      }
+    } catch (e) {
+      print('❌ Error restando puntos por salida: $e');
+    }
+  }
+
+  // ✅ NUEVO: Mostrar notificación cuando regresa
+  void _mostrarNotificacionRegreso() {
+    if (_tiempoSalidaApp != null) {
+      final tiempoFuera = DateTime.now().difference(_tiempoSalidaApp!);
+      final minutosFuera = tiempoFuera.inMinutes;
+      
+      // Solo mostrar si estuvo fuera más de 3 segundos
+      if (tiempoFuera.inSeconds > 3) {
+        setState(() {
+          _puntosAnimacion = -10; // Puntos restados
+          _puntosPositivos = false;
+          _motivoPuntos = 'Saliste ${minutosFuera}min';
+          _mostrandoAnimacionPuntos = true;
+        });
+      }
+    }
   }
 
   // ✅ NUEVO: Cargar preferencias 2D/3D
@@ -80,6 +172,14 @@ class _NavigationScreenState extends State<NavigationScreen> {
         distanceFilter: 3, // Actualizar cada 3 metros
       ),
     ).listen(_onLocationUpdate);
+
+    // ✅ AGREGAR AL FINAL DEL MÉTODO:
+    // Otorgar puntos por iniciar ruta después de un momento
+    Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        _otorgarPuntosInicioRuta();
+      }
+    });
   }
 
   
@@ -131,6 +231,11 @@ class _NavigationScreenState extends State<NavigationScreen> {
         _tiempoRestante = 'Calculando...';
       }
     });
+
+    // ✅ NUEVO: DETECTAR LLEGADA AL DESTINO
+    if (distanciaMetros <= 50 && !_puntosInicioOtorgados) { // 50 metros = llegada
+      _otorgarPuntosRutaCompletada();
+    }
   }
 
   // ✅ NUEVO: Toggle entre 2D y 3D en navegación
@@ -182,6 +287,86 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   void _salirDeNavegacion() {
     Navigator.pop(context);
+  }
+
+  // ✅ AGREGAR ESTE MÉTODO DESPUÉS DE _calcularDistanciaRestante:
+  Future<void> _otorgarPuntosInicioRuta() async {
+    if (_puntosInicioOtorgados) return; // Solo 1 vez por sesión de navegación
+    
+    try {
+      // ✅ VERIFICAR RACHA DIARIA PRIMERO
+      final rachaResult = await PointsService.activarRachaDiaria();
+      
+      bool mostrarPuntosRacha = false;
+      if (rachaResult['status'] == 'success' && rachaResult['primera_vez_hoy'] == true) {
+        mostrarPuntosRacha = true;
+        print('✅ Primera racha del día activada');
+      } else if (rachaResult['ya_activada'] == true) {
+        print('⏰ Racha ya activada hoy - no dar puntos extra');
+      }
+      
+      // ✅ DAR PUNTOS POR INICIAR RUTA (siempre)
+      final result = await PointsService.darPuntosInicioRuta();
+      
+      if (result['status'] == 'success') {
+        // ✅ MOSTRAR ANIMACIÓN DE PUNTOS
+        setState(() {
+          _puntosAnimacion = result['puntos_cambio'];
+          _puntosPositivos = true;
+          _motivoPuntos = mostrarPuntosRacha ? 'Inicio + Racha' : 'Inicio';
+          _mostrandoAnimacionPuntos = true;
+          _puntosInicioOtorgados = true;
+        });
+        
+        print('✅ Puntos otorgados: +${result['puntos_cambio']}');
+        
+        // ✅ SI ES PRIMERA RACHA DEL DÍA, MOSTRAR MENSAJE EXTRA
+        if (mostrarPuntosRacha) {
+          // Esperar un momento y mostrar mensaje de racha
+          Timer(const Duration(seconds: 3), () {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('🔥 ¡Primera ruta del día! Racha activada'),
+                  backgroundColor: Colors.orange,
+                  behavior: SnackBarBehavior.floating,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          });
+        }
+      }
+    } catch (e) {
+      print('❌ Error otorgando puntos de inicio: $e');
+    }
+  }
+
+  // ✅ AGREGAR ESTE MÉTODO PARA CUANDO COMPLETE LA RUTA:
+  Future<void> _otorgarPuntosRutaCompletada() async {
+    try {
+      final result = await PointsService.darPuntosRutaCompletada();
+      
+      if (result['status'] == 'success') {
+        setState(() {
+          _puntosAnimacion = result['puntos_cambio'];
+          _puntosPositivos = true;
+          _motivoPuntos = 'Completada';
+          _mostrandoAnimacionPuntos = true;
+        });
+        
+        print('✅ Puntos por completar ruta: +${result['puntos_cambio']}');
+      }
+    } catch (e) {
+      print('❌ Error otorgando puntos de completado: $e');
+    }
+  }
+
+  // ✅ CALLBACK CUANDO TERMINE LA ANIMACIÓN
+  void _onAnimacionPuntosComplete() {
+    setState(() {
+      _mostrandoAnimacionPuntos = false;
+    });
   }
 
   @override
@@ -400,7 +585,21 @@ class _NavigationScreenState extends State<NavigationScreen> {
             ),
           ),
 
-          
+          // ✅ NUEVO: WIDGET DE ANIMACIÓN DE PUNTOS
+          if (_mostrandoAnimacionPuntos)
+            Positioned(
+              top: 120, // ✅ Debajo del header, no estorba
+              left: 0,
+              right: 0,
+              child: Center(
+                child: PointsAnimationWidget(
+                  puntos: _puntosAnimacion,
+                  esPositivo: _puntosPositivos,
+                  motivo: _motivoPuntos,
+                  onAnimationComplete: _onAnimacionPuntosComplete,
+                ),
+              ),
+            ),
         ],
       ),
     );

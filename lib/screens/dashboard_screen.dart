@@ -24,20 +24,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     const ProfileScreen(),
   ];
 
+  // ✅ CAMBIAR TODO EL MÉTODO _onTabTapped:
   void _onTabTapped(int index) {
     setState(() {
       _currentIndex = index;
     });
     
-    // ✅ Si cambió a la pestaña de comunidad, forzar recarga
-    if (index == 1) {
-      // Forzar rebuild de CommunityScreen
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {}); // Esto hará que se reconstruya CommunityScreen
-        }
-      });
-    }
+    print('📱 Cambiando a pestaña $index');
+    
+    // ✅ QUITAR TODA LA LÓGICA COMPLEJA DE RECARGA
+    // Solo cambiar pestaña, nada más
   }
 
   @override
