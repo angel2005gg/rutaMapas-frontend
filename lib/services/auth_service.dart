@@ -4,7 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart'; // ✅ IMPORTAR CONFIGURACIÓN
-
+import 'dart:async';
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: Platform.isIOS 
@@ -176,27 +176,54 @@ class AuthService {
   Future<Map<String, dynamic>?> getCurrentUser() async {
     try {
       final token = await storage.read(key: 'token');
-      if (token == null) return null;
+      if (token == null) {
+        print('🔍 No hay token guardado');
+        return null;
+      }
 
+      print('🔍 Token encontrado, verificando validez...');
+      
+      // ✅ TIMEOUT MÁS CORTO PARA RESPUESTA RÁPIDA
       final response = await http.get(
-        Uri.parse(ApiConfig.userUrl), // ✅ USAR CONFIGURACIÓN
+        Uri.parse(ApiConfig.userUrl),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
+      ).timeout(
+        const Duration(seconds: 6), // ✅ TIMEOUT DE 6 SEGUNDOS
+        onTimeout: () {
+          throw TimeoutException('Server response timeout');
+        },
       );
 
-      print('Get user response status: ${response.statusCode}');
-      print('Get user response body: ${response.body}');
+      print('🔍 AuthService.getCurrentUser response status: ${response.statusCode}');
+      print('🔍 AuthService.getCurrentUser response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final data = json.decode(response.body);
+        
+        // ✅ DEBUG ESPECÍFICO PARA LA RACHA
+        if (data['user'] != null) {
+          print('🔍 Racha en AuthService: ${data['user']['racha_actual']}');
+        }
+        
+        return data;
       } else {
+        // ✅ SI EL TOKEN NO ES VÁLIDO, ELIMINARLO
+        await storage.delete(key: 'token');
         return null;
       }
     } catch (e) {
-      print('Error en getCurrentUser: $e');
-      return null;
+      print('❌ Error en getCurrentUser: $e');
+      
+      // ✅ SI HAY ERROR, ELIMINAR TOKEN INVÁLIDO
+      try {
+        await storage.delete(key: 'token');
+      } catch (_) {}
+      
+      // ✅ RE-LANZAR EL ERROR PARA QUE SPLASH LO MANEJE
+      rethrow;
     }
   }
 

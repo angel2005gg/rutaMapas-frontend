@@ -18,34 +18,25 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
   
   bool _isExpanded = false;
   late AnimationController _animationController;
-  late Animation<double> _slideAnimation;
-  late Animation<double> _fadeAnimation;
+  late Animation<double> _fadeAnimation; // ✅ SOLO UNA ANIMACIÓN
   Timer? _autoCloseTimer;
 
   @override
   void initState() {
     super.initState();
     
-    // ✅ CONFIGURAR ANIMACIONES
+    // ✅ SOLO UNA ANIMACIÓN SIMPLE para mejor rendimiento
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 250), // ✅ MÁS RÁPIDO
       vsync: this,
     );
-    
-    _slideAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutBack,
-    ));
     
     _fadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeInOut,
+      curve: Curves.easeOut, // ✅ CURVA MÁS SIMPLE
     ));
   }
 
@@ -56,7 +47,6 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
     super.dispose();
   }
 
-  // ✅ ABRIR/CERRAR ADVERTENCIA
   void _toggleWarning() {
     if (_isExpanded) {
       _closeWarning();
@@ -65,7 +55,6 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
     }
   }
 
-  // ✅ ABRIR ADVERTENCIA
   void _openWarning() {
     setState(() {
       _isExpanded = true;
@@ -73,25 +62,23 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
     
     _animationController.forward();
     
-    // ✅ AUTO CERRAR DESPUÉS DE 10 SEGUNDOS
-    _autoCloseTimer = Timer(const Duration(seconds: 10), () {
+    // ✅ AUTO CERRAR DESPUÉS DE 8 SEGUNDOS (menos tiempo)
+    _autoCloseTimer = Timer(const Duration(seconds: 8), () {
       if (_isExpanded) {
         _closeWarning();
       }
     });
     
-    // ✅ CALLBACK: Marcar que se leyó la advertencia
     widget.onWarningRead?.call();
-    
     print('⚠️ Advertencia de seguridad mostrada');
   }
 
-  // ✅ CERRAR ADVERTENCIA
   void _closeWarning() {
     _autoCloseTimer?.cancel();
     _animationController.reverse();
     
-    Timer(const Duration(milliseconds: 400), () {
+    // ✅ DELAY MÁS CORTO
+    Timer(const Duration(milliseconds: 250), () {
       if (mounted) {
         setState(() {
           _isExpanded = false;
@@ -107,7 +94,7 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // ✅ BOTÓN PRINCIPAL (siempre visible)
+        // ✅ BOTÓN PRINCIPAL OPTIMIZADO
         GestureDetector(
           onTap: _toggleWarning,
           child: Container(
@@ -116,15 +103,16 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
             decoration: BoxDecoration(
               color: Colors.orange[600],
               shape: BoxShape.circle,
+              // ✅ SHADOW MÁS SIMPLE
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 8,
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
-            child: Icon(
+            child: const Icon(
               Icons.warning,
               color: Colors.white,
               size: 26,
@@ -132,87 +120,69 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
           ),
         ),
 
-        // ✅ PANEL DESLIZANTE (solo cuando está expandido)
+        // ✅ PANEL OPTIMIZADO (sin animaciones complejas)
         if (_isExpanded)
           Positioned(
-            left: 60, // ✅ Sale desde el lado derecho del botón
+            left: 60,
             top: -20,
-            child: AnimatedBuilder(
-              animation: _animationController,
-              builder: (context, child) {
-                return Transform.translate(
-                  offset: Offset(
-                    -50 * (1 - _slideAnimation.value), // ✅ Deslizar desde la derecha
-                    0,
-                  ),
-                  child: Opacity(
-                    opacity: _fadeAnimation.value,
-                    child: Transform.scale(
-                      scale: _slideAnimation.value,
-                      alignment: Alignment.centerLeft,
-                      child: _buildWarningPanel(),
-                    ),
-                  ),
-                );
-              },
+            child: FadeTransition( // ✅ SOLO FADE, SIN SLIDE NI SCALE
+              opacity: _fadeAnimation,
+              child: _buildWarningPanel(),
             ),
           ),
       ],
     );
   }
 
-  // ✅ PANEL DE ADVERTENCIA
+  // ✅ PANEL OPTIMIZADO CON MENOS ELEMENTOS
   Widget _buildWarningPanel() {
     return Container(
       width: 280,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12), // ✅ MENOS REDONDEADO
+        // ✅ SHADOW MÁS SIMPLE
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
           ),
         ],
         border: Border.all(
           color: Colors.orange[300]!,
-          width: 2,
+          width: 1.5,
         ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ✅ HEADER
+          // ✅ HEADER SIMPLIFICADO
           Row(
             children: [
               Icon(
                 Icons.security,
                 color: Colors.orange[600],
-                size: 24,
+                size: 22,
               ),
               const SizedBox(width: 8),
-              Expanded(
+              const Expanded(
                 child: Text(
                   '⚠️ SEGURIDAD VIAL',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Colors.orange[700],
+                    color: Colors.black87,
                   ),
                 ),
               ),
-              // ✅ BOTÓN CERRAR
+              // ✅ BOTÓN CERRAR SIMPLE
               GestureDetector(
                 onTap: _closeWarning,
                 child: Container(
                   padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    shape: BoxShape.circle,
-                  ),
                   child: Icon(
                     Icons.close,
                     size: 16,
@@ -223,63 +193,78 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
             ],
           ),
           
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           
-          // ✅ MENSAJE PRINCIPAL
-          Text(
+          // ✅ MENSAJE DIRECTO Y SIMPLE
+          const Text(
             'Durante la navegación:',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Colors.grey[800],
+              color: Colors.black87,
             ),
           ),
           
           const SizedBox(height: 8),
           
-          // ✅ REGLAS
-          _buildRule(
-            icon: Icons.phone_android,
-            text: 'NO salgas de la aplicación',
-            color: Colors.red[600]!,
-          ),
+          // ✅ REGLAS SIMPLIFICADAS (sin iconos complejos)
+          _buildSimpleRule('• NO salgas de la aplicación'),
+          _buildSimpleRule('• NO contestes llamadas'),
+          _buildSimpleRule('• NO uses otras aplicaciones'),
           
-          _buildRule(
-            icon: Icons.phone_callback,
-            text: 'NO contestes llamadas',
-            color: Colors.red[600]!,
-          ),
+          const SizedBox(height: 10),
           
-          _buildRule(
-            icon: Icons.apps,
-            text: 'NO uses otras aplicaciones',
-            color: Colors.red[600]!,
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // ✅ CONSECUENCIAS
+          // ✅ MENSAJE FINAL SIMPLE
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.red[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red[200]!),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               children: [
                 Icon(
                   Icons.remove_circle,
                   color: Colors.red[600],
-                  size: 20,
+                  size: 16,
                 ),
                 const SizedBox(width: 8),
-                Expanded(
+                const Expanded(
                   child: Text(
-                    'Salir de la app restará puntos a tu comunidad',
+                    'Salir restará puntos',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.red[700],
+                      fontSize: 11,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 6),
+          
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.green[50],
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.add_circle,
+                  color: Colors.green[600],
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Completar dará puntos bonus',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.black87,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -290,86 +275,33 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
           
           const SizedBox(height: 8),
           
-          // ✅ BENEFICIOS
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.green[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.green[200]!),
+          // ✅ CONTADOR SIMPLE
+          Center(
+            child: Text(
+              'Se cerrará automáticamente',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[500],
+                fontStyle: FontStyle.italic,
+              ),
             ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.add_circle,
-                  color: Colors.green[600],
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Completar la ruta te dará puntos bonus',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.green[700],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // ✅ CONTADOR DE AUTO-CIERRE
-          AnimatedBuilder(
-            animation: _animationController,
-            builder: (context, child) {
-              return Center(
-                child: Text(
-                  'Se cerrará automáticamente en 10s',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey[500],
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              );
-            },
           ),
         ],
       ),
     );
   }
 
-  // ✅ WIDGET PARA CADA REGLA
-  Widget _buildRule({
-    required IconData icon,
-    required String text,
-    required Color color,
-  }) {
+  // ✅ WIDGET SIMPLE PARA REGLAS (sin iconos complejos)
+  Widget _buildSimpleRule(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: color,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[700],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.grey[700],
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
