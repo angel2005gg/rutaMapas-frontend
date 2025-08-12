@@ -51,199 +51,37 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
 
   static const String _colorfulMapStyle = '''
 [
-  {
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#0d1421"
-      }
-    ]
-  },
-  {
-    "elementType": "labels.icon",
-    "stylers": [
-      {
-        "visibility": "off"
-      }
-    ]
-  },
-  {
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#e5e7eb"
-      }
-    ]
-  },
-  {
-    "elementType": "labels.text.stroke",
-    "stylers": [
-      {
-        "color": "#0d1421"
-      }
-    ]
-  },
-  {
-    "featureType": "administrative",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#1e40af"
-      }
-    ]
-  },
-  {
-    "featureType": "administrative.country",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#f3f4f6"
-      }
-    ]
-  },
-  {
-    "featureType": "administrative.locality",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#f3f4f6"
-      }
-    ]
-  },
-  {
-    "featureType": "administrative.neighborhood",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#9ca3af"
-      }
-    ]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#d1d5db"
-      }
-    ]
-  },
-  {
-    "featureType": "poi.park",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#065f46"
-      }
-    ]
-  },
-  {
-    "featureType": "poi.park",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#34d399"
-      }
-    ]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry.fill",
-    "stylers": [
-      {
-        "color": "#1f2937"
-      }
-    ]
-  },
-  {
-    "featureType": "road",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#d1d5db"
-      }
-    ]
-  },
-  {
-    "featureType": "road.arterial",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#374151"
-      }
-    ]
-  },
-  {
-    "featureType": "road.arterial",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#e5e7eb"
-      }
-    ]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#4b5563"
-      }
-    ]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#f3f4f6"
-      }
-    ]
-  },
-  {
-    "featureType": "road.local",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#1f2937"
-      }
-    ]
-  },
-  {
-    "featureType": "road.local",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#9ca3af"
-      }
-    ]
-  },
-  {
-    "featureType": "transit",
-    "stylers": [
-      {
-        "visibility": "off"
-      }
-    ]
-  },
-  {
-    "featureType": "water",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#1e3a5f"
-      }
-    ]
-  },
-  {
-    "featureType": "water",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#93c5fd"
-      }
-    ]
-  }
+  { "elementType": "geometry", "stylers": [ { "color": "#0d1421" } ] },
+
+  // 🔵 HABILITAR ICONOS/ETIQUETAS DE POI
+  { "elementType": "labels.icon", "stylers": [ { "visibility": "on" } ] },
+  { "featureType": "poi", "elementType": "labels.icon", "stylers": [ { "visibility": "on" } ] },
+
+  { "elementType": "labels.text.fill", "stylers": [ { "color": "#e5e7eb" } ] },
+  { "elementType": "labels.text.stroke", "stylers": [ { "color": "#0d1421" } ] },
+
+  { "featureType": "administrative", "elementType": "geometry", "stylers": [ { "color": "#1e40af" } ] },
+  { "featureType": "administrative.country", "elementType": "labels.text.fill", "stylers": [ { "color": "#f3f4f6" } ] },
+  { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [ { "color": "#f3f4f6" } ] },
+  { "featureType": "administrative.neighborhood", "elementType": "labels.text.fill", "stylers": [ { "color": "#9ca3af" } ] },
+
+  { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [ { "color": "#d1d5db" } ] },
+  { "featureType": "poi.park", "elementType": "geometry", "stylers": [ { "color": "#065f46" } ] },
+  { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [ { "color": "#34d399" } ] },
+
+  { "featureType": "road", "elementType": "geometry.fill", "stylers": [ { "color": "#1f2937" } ] },
+  { "featureType": "road", "elementType": "labels.text.fill", "stylers": [ { "color": "#d1d5db" } ] },
+  { "featureType": "road.arterial", "elementType": "geometry", "stylers": [ { "color": "#374151" } ] },
+  { "featureType": "road.arterial", "elementType": "labels.text.fill", "stylers": [ { "color": "#e5e7eb" } ] },
+  { "featureType": "road.highway", "elementType": "geometry", "stylers": [ { "color": "#4b5563" } ] },
+  { "featureType": "road.highway", "elementType": "labels.text.fill", "stylers": [ { "color": "#f3f4f6" } ] },
+  { "featureType": "road.local", "elementType": "geometry", "stylers": [ { "color": "#1f2937" } ] },
+  { "featureType": "road.local", "elementType": "labels.text.fill", "stylers": [ { "color": "#9ca3af" } ] },
+
+  { "featureType": "transit", "stylers": [ { "visibility": "off" } ] },
+
+  { "featureType": "water", "elementType": "geometry", "stylers": [ { "color": "#1e3a5f" } ] },
+  { "featureType": "water", "elementType": "labels.text.fill", "stylers": [ { "color": "#93c5fd" } ] }
 ]
 ''';
 
@@ -463,11 +301,11 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
         }
       }
       
-      if (mounted && nuevosMarcadores.length > 1) {
+      if (mounted && nuevosMarcadores.isNotEmpty) {
         setState(() {
           _allMarkers = nuevosMarcadores;
         });
-        print('✅ Google Places: ${nuevosMarcadores.length - 1} lugares cargados en el mapa');
+        print('✅ Google Places: ${nuevosMarcadores.length} lugares cargados en el mapa');
       }
       
     } catch (e) {
@@ -635,21 +473,13 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
     setState(() {
       _currentMapType = tipo;
     });
-    
-    // ✅ LÓGICA CORREGIDA:
-    // Normal = Tu estilo personalizado
-    // Satelital = Sin estilo (Google satelital)  
-    // Claro = Sin estilo (Google por defecto)
     if (_mapController != null) {
       if (tipo == MapType.normal) {
-        // Tu estilo personalizado oscuro
-        _mapController!.setMapStyle(_colorfulMapStyle);
+        _mapController!.setMapStyle(_colorfulMapStyle); // tus colores + POIs visibles
       } else {
-        // Satélite y Claro = sin estilo personalizado
-        _mapController!.setMapStyle(null);
+        _mapController!.setMapStyle(null); // satélite/terreno sin estilo
       }
     }
-    
     print('🗺️ Tipo de mapa cambiado a: ${tipo.toString()}');
   }
 
@@ -732,8 +562,12 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
           ),
           onMapCreated: (GoogleMapController controller) {
             _mapController = controller;
-            _mapController!.setMapStyle(_colorfulMapStyle);
-            print('✅ Mapa creado exitosamente con estilo colorido');
+            if (_currentMapType == MapType.normal) {
+              _mapController!.setMapStyle(_colorfulMapStyle);
+            } else {
+              _mapController!.setMapStyle(null);
+            }
+            print('✅ Mapa creado exitosamente');
           },
           onCameraMove: (CameraPosition position) {
             // Forzar rebuild de los globos cuando se mueva el mapa

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:ui' as ui; // AGREGAR
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter/material.dart'; // AGREGAR
 
 // ✅ AGREGAR CACHE AL INICIO DE LA CLASE PlacesService:
 class PlacesService {
@@ -179,20 +181,127 @@ class PlacesService {
     );
   }
 
-  // ✅ NUEVO: Método para crear icono personalizado con burbuja
+  // ✅ NUEVO: Método para crear icono personalizado con burbuja (icono + texto)
   static Future<BitmapDescriptor> _crearIconoConBurbuja({
     required String nombre,
     required String categoria,
-    double? rating,
+    double? rating, // ✅ AGREGADO: parámetro opcional para evitar el error
+    double devicePixelRatio = 3.0, // escala para nitidez
   }) async {
-    // Por ahora usaremos iconos básicos de Google Maps con colores
-    // En el futuro se puede implementar CustomPainter para burbujas reales
-    
-    final emoji = _obtenerEmojiCategoria(categoria);
-    final color = _obtenerColorCategoria(categoria);
-    
-    // Para esta implementación, usaremos el marcador con color personalizado
-    return BitmapDescriptor.defaultMarkerWithHue(color);
+    // Configuración visual
+    final Color baseColor = _obtenerColorPlanoCategoria(categoria);
+    final IconData iconData = _obtenerIconoCategoria(categoria);
+    final String texto = _truncarNombre(nombre, maxChars: 16);
+
+    // Tamaños “densos” para un bitmap nítido
+    final double iconSize = 28.0 * devicePixelRatio;
+    final double textSize = 24.0 * devicePixelRatio;
+    final double paddingH = 16.0 * devicePixelRatio;
+    final double paddingV = 10.0 * devicePixelRatio;
+    final double spacing = 10.0 * devicePixelRatio;
+    final double borderRadius = 20.0 * devicePixelRatio;
+    final double borderWidth = 2.0 * devicePixelRatio;
+
+    // Mide texto
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: texto,
+        style: TextStyle(
+          color: const Color(0xFF1F2937), // gris oscuro
+          fontSize: textSize,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout();
+
+    final double contentWidth = iconSize + spacing + textPainter.width;
+    final double width = contentWidth + paddingH * 2;
+    final double height = iconSize + paddingV * 2;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, width, height));
+
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, width, height),
+      Radius.circular(borderRadius),
+    );
+
+    // Fondo
+    final bgPaint = Paint()..color = Colors.white;
+    canvas.drawRRect(rrect, bgPaint);
+
+    // Borde
+    final borderPaint = Paint()
+      ..color = const Color(0xFFE5E7EB) // gris claro
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = borderWidth;
+    canvas.drawRRect(rrect, borderPaint);
+
+    // Dibuja icono (como glyph de MaterialIcons)
+    final iconPainter = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(iconData.codePoint),
+        style: TextStyle(
+          fontSize: iconSize,
+          fontFamily: iconData.fontFamily,
+          package: iconData.fontPackage,
+          color: baseColor,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final double iconX = paddingH;
+    final double iconY = (height - iconPainter.height) / 2;
+    iconPainter.paint(canvas, Offset(iconX, iconY));
+
+    // Dibuja texto
+    final double textX = iconX + iconPainter.width + spacing;
+    final double textY = (height - textPainter.height) / 2;
+    textPainter.paint(canvas, Offset(textX, textY));
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(width.toInt(), height.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final bytes = byteData!.buffer.asUint8List();
+
+    return BitmapDescriptor.fromBytes(bytes);
+  }
+
+  // ✅ Helpers de estilo e iconos planos
+  static Color _obtenerColorPlanoCategoria(String categoria) {
+    switch (categoria) {
+      case 'restaurantes': return const Color(0xFFEF6C00); // naranja
+      case 'gasolineras': return const Color(0xFF1565C0); // azul
+      case 'bancos': return const Color(0xFFF59E0B); // ámbar
+      case 'supermercados': return const Color(0xFF2E7D32); // verde
+      case 'farmacias': return const Color(0xFF2E7D32); // verde
+      case 'hospitales': return const Color(0xFFD32F2F); // rojo
+      case 'centros_comerciales': return const Color(0xFF7B1FA2); // morado
+      default: return const Color(0xFF6B7280); // gris
+    }
+  }
+
+  static IconData _obtenerIconoCategoria(String categoria) {
+    switch (categoria) {
+      case 'restaurantes': return Icons.restaurant;
+      case 'gasolineras': return Icons.local_gas_station;
+      case 'bancos': return Icons.account_balance;
+      case 'supermercados': return Icons.shopping_cart;
+      case 'farmacias': return Icons.local_pharmacy;
+      case 'hospitales': return Icons.local_hospital;
+      case 'centros_comerciales': return Icons.local_mall;
+      case 'hoteles': return Icons.bed;
+      default: return Icons.place;
+    }
+  }
+
+  static String _truncarNombre(String nombre, {int maxChars = 16}) {
+    if (nombre.length <= maxChars) return nombre;
+    return '${nombre.substring(0, maxChars)}…';
   }
 
   // ✅ NUEVO: Obtener color para cada categoría
