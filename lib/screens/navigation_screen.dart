@@ -81,49 +81,14 @@ class _NavigationScreenState extends State<NavigationScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
-    if (!_navegacionActiva) return; // Solo si está navegando
-    
-    switch (state) {
-      case AppLifecycleState.paused:
-      case AppLifecycleState.inactive:
-      case AppLifecycleState.detached:
-        // ✅ APP PASÓ A SEGUNDO PLANO
-        if (_appEnPrimerPlano) {
-          _appEnPrimerPlano = false;
-          _tiempoSalidaApp = DateTime.now();
-          _restarPuntosPorSalida();
-          print('📱 App pasó a segundo plano - restando puntos');
-        }
-        break;
-        
-      case AppLifecycleState.resumed:
-        // ✅ APP VOLVIÓ AL PRIMER PLANO
-        if (!_appEnPrimerPlano) {
-          _appEnPrimerPlano = true;
-          _mostrarNotificacionRegreso();
-          print('📱 App volvió al primer plano');
-        }
-        break;
-        
-      case AppLifecycleState.hidden:
-        // No hacer nada especial
-        break;
-    }
+    // 🚫 Desactivado: NO restar ni sumar puntos al salir/volver a la app
+    print('📱 AppLifecycleState: $state (puntos por salida desactivados)');
   }
 
-  // ✅ NUEVO: Restar puntos por salir de la app
+  // 🚫 Desactivado: ya no se restan puntos por salir de la app
   Future<void> _restarPuntosPorSalida() async {
-    try {
-      final result = await PointsService.restarPuntosSalidaApp();
-      
-      if (result['status'] == 'success') {
-        print('❌ Puntos restados por salir: ${result['puntos_cambio']}');
-        // Los puntos se mostrarán cuando regrese a la app
-      }
-    } catch (e) {
-      print('❌ Error restando puntos por salida: $e');
-    }
+    print('ℹ️ _restarPuntosPorSalida() desactivado');
+    return; // no-op
   }
 
   // ✅ NUEVO: Mostrar notificación cuando regresa
