@@ -133,34 +133,55 @@ class _CommunityScreenState extends State<CommunityScreen> {
     );
   }
 
-  // ✅ NUEVO: Método para obtener mi posición en el ranking
+  // ✅ NUEVO: Método para obtener mi posición en el ranking (robusto)
   Map<String, dynamic> _obtenerMiPosicion() {
     if (_comunidadActual == null) {
       return {'posicion': null, 'puntos': 0};
     }
 
-    final rankingMiembros = List<Map<String, dynamic>>.from(_comunidadActual!['usuarios'] ?? []);
-    
-    // Buscar mi posición en el ranking (esto depende de cómo identifiques al usuario actual)
-    // Por ahora asumiré que hay alguna manera de identificar al usuario actual
-    // Puedes ajustar esta lógica según tu implementación
-    
-    for (var miembro in rankingMiembros) {
-      // Aquí deberías comparar con el ID del usuario actual
-      // Por ahora usaré una lógica temporal
-      if (miembro['es_usuario_actual'] == true) { // Necesitarás agregar este campo en el backend
-        return {
-          'posicion': miembro['posicion'],
-          'puntos': miembro['puntos'] ?? 0,
-        };
-      }
+    final usuariosRaw = _comunidadActual!['usuarios'];
+    if (usuariosRaw == null || usuariosRaw is! List) {
+      return {'posicion': null, 'puntos': 0};
     }
-    
-    // Si no se encuentra, asumir última posición
-    return {
-      'posicion': rankingMiembros.length > 0 ? rankingMiembros.length : null,
-      'puntos': 0,
-    };
+
+    final usuarios = List<Map<String, dynamic>>.from(usuariosRaw);
+
+    // 1) Intentar encontrar al usuario actual por la marca del backend
+    Map<String, dynamic>? yo = usuarios.firstWhere(
+      (u) => u['es_usuario_actual'] == true || u['es_actual'] == true,
+      orElse: () => {},
+    );
+
+    if (yo != null && yo.isNotEmpty) {
+      // Si ya viene la posición desde el backend, úsala
+      final pos = (yo['posicion'] is int) ? yo['posicion'] as int : null;
+      final pts = (yo['puntaje'] ?? 0) is int ? yo['puntaje'] as int : 0;
+
+      if (pos != null && pos > 0) {
+        return {'posicion': pos, 'puntos': pts};
+      }
+
+      // Si no viene 'posicion', calcularla por orden de puntaje desc
+      final ordenados = [...usuarios]..sort(
+        (a, b) => (b['puntaje'] ?? 0).compareTo(a['puntaje'] ?? 0),
+      );
+      final idx = ordenados.indexWhere((u) => identical(u, yo));
+      return {
+        'posicion': idx >= 0 ? idx + 1 : null,
+        'puntos': pts,
+      };
+    }
+
+    // 2) Si no hay marca del backend, usar el orden por 'posicion' si existe
+    if (usuarios.isNotEmpty && usuarios.first.containsKey('posicion')) {
+      // Buscar el primer elemento marcado como actual por comparación simple:
+      // si backend no marca, devolver null (evita mostrar posición errónea)
+      return {'posicion': null, 'puntos': 0};
+    }
+
+    // 3) Fallback: orden por puntaje desc y no sabemos cuál es "yo"
+    // Dejar "sin clasificar" para evitar indicar una posición incorrecta.
+    return {'posicion': null, 'puntos': 0};
   }
 
   Widget _buildSinComunidades() {
