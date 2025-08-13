@@ -302,18 +302,19 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   // ✅ AGREGAR ESTE MÉTODO DESPUÉS DE _calcularDistanciaRestante:
   Future<void> _otorgarPuntosInicioRuta() async {
-    if (_puntosInicioOtorgados) return; // Solo 1 vez por sesión de navegación
-    
+    if (_puntosInicioOtorgados) return;
     try {
-      // ✅ VERIFICAR RACHA DIARIA PRIMERO
+      // ✅ Primero: si se saltó un día, resetear racha
+      await PointsService.verificarRachaYResetSiCorresponde();
+
+      // ✅ Luego: activar racha de hoy (una sola vez por día)
       final rachaResult = await PointsService.activarRachaDiaria();
-      
       bool mostrarPuntosRacha = false;
+
       if (rachaResult['status'] == 'success' && rachaResult['primera_vez_hoy'] == true) {
         mostrarPuntosRacha = true;
-        print('✅ Primera racha del día activada');
       } else if (rachaResult['ya_activada'] == true) {
-        print('⏰ Racha ya activada hoy - no dar puntos extra');
+        mostrarPuntosRacha = false;
       }
       
       // ✅ DAR PUNTOS POR INICIAR RUTA (siempre)
