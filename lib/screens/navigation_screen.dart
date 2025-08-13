@@ -7,8 +7,9 @@ import '../widgets/map_view_toggle.dart'; // ✅ NUEVO IMPORT
 import '../widgets/center_location_button.dart'; // ✅ NUEVO IMPORT
 // ✅ AGREGAR ESTOS IMPORTS AL INICIO
 import '../services/points_service.dart';
-import '../widgets/points_animation_widget.dart'; 
-import 'package:flutter/services.dart';
+import '../widgets/points_animation_widget.dart';
+import '../services/distraction_monitor_service.dart'; // ✅ NUEVO
+import '../config/scoring_config.dart'; // ✅ NUEVO
 
 class NavigationScreen extends StatefulWidget {
   final LatLng destino;
@@ -28,7 +29,7 @@ class NavigationScreen extends StatefulWidget {
   State<NavigationScreen> createState() => _NavigationScreenState();
 }
 
-class _NavigationScreenState extends State<NavigationScreen> 
+class _NavigationScreenState extends State<NavigationScreen>
     with WidgetsBindingObserver { // ✅ AGREGAR ESTE MIXIN
   GoogleMapController? _mapController;
   Position? _currentPosition;
@@ -56,33 +57,76 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _tiempoSalidaApp;
   bool _navegacionActiva = false;
 
+  final DistractionMonitorService _monitor = DistractionMonitorService.instance; // ✅ NUEVO
+
   @override
   void initState() {
     super.initState();
     _loadPreferences();
     _iniciarNavegacion();
-    
-    // ✅ AGREGAR: Registrar observer para detectar cambios de app
+
     WidgetsBinding.instance.addObserver(this);
     _navegacionActiva = true;
+
+    // ✅ Iniciar monitoreo de distracciones al comenzar navegación
+    _monitor.startSession();
   }
 
   @override
   void dispose() {
     _positionStream?.cancel();
     _locationSubscription?.cancel();
-    
-    // ✅ AGREGAR: Quitar observer
     WidgetsBinding.instance.removeObserver(this);
+
+    // ✅ Detener monitoreo
+    _monitor.stopSession();
+
     super.dispose();
   }
 
-  // ✅ NUEVO: Detectar cambios en el estado de la app
+  // ✅ DETECCIÓN de ciclo de vida: medimos sólo cuando hay navegación activa
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // 🚫 Desactivado: NO restar ni sumar puntos al salir/volver a la app
-    print('📱 AppLifecycleState: $state (puntos por salida desactivados)');
+
+    if (!_navegacionActiva) return;
+
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+      _tiempoSalidaApp = DateTime.now();
+      _monitor.markBackgroundStart();
+      print('📱 App en background (monitoreo activo)');
+    } else if (state == AppLifecycleState.resumed) {
+      _procesarRegresoDesdeBackground();
+    }
+  }
+
+  Future<void> _procesarRegresoDesdeBackground() async {
+    try {
+      final resumen = await _monitor.summarizeOnForeground();
+      if (!mounted) return;
+
+      final motivo = resumen.motivo.isEmpty ? 'Resumen de distracciones' : resumen.motivo;
+
+      // ✅ Si hay delta, mostrar animación y enviar ajuste
+      if (resumen.deltaPuntos != 0) {
+        setState(() {
+          _mostrandoAnimacionPuntos = true;
+          _puntosAnimacion = resumen.deltaPuntos.abs();
+          _puntosPositivos = resumen.deltaPuntos > 0;
+          _motivoPuntos = motivo;
+        });
+
+        final resp = await PointsService.ajustarPuntosPorDistracciones(
+          resumen.deltaPuntos,
+          'Distracciones durante la ruta: $motivo',
+        );
+        print('🎯 Ajuste puntos distracciones: $resp');
+      } else {
+        print('✅ Sin cambios de puntos en este regreso');
+      }
+    } catch (e) {
+      print('❌ Error procesando regreso: $e');
+    }
   }
 
   // 🚫 Desactivado: ya no se restan puntos por salir de la app

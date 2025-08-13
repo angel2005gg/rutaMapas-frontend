@@ -21,6 +21,14 @@ class PointsService {
     return await _actualizarPuntos(-10, 'Salió de la aplicación durante navegación');
   }
 
+  // ✅ NUEVO: Ajuste de puntos por distracciones (apps/llamadas)
+  static Future<Map<String, dynamic>> ajustarPuntosPorDistracciones(
+    int puntos,
+    String motivo,
+  ) async {
+    return await _actualizarPuntos(puntos, motivo);
+  }
+
   // ✅ MÉTODO PRIVADO para comunicarse con el backend
   static Future<Map<String, dynamic>> _actualizarPuntos(int puntos, String motivo) async {
     try {

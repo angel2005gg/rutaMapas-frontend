@@ -208,40 +208,40 @@ class _SafetyWarningWidgetState extends State<SafetyWarningWidget>
           const SizedBox(height: 8),
           
           // ✅ REGLAS SIMPLIFICADAS (sin iconos complejos)
-          _buildSimpleRule('• NO salgas de la aplicación'),
-          _buildSimpleRule('• NO contestes llamadas'),
-          _buildSimpleRule('• NO uses otras aplicaciones'),
+          _buildSimpleRule('• Evita usar otras aplicaciones mientras navegas'),
+          _buildSimpleRule('• No contestes llamadas (recházalas o ignóralas)'),
+          _buildSimpleRule('• Salir brevemente no afecta si no usas otras apps'),
           
           const SizedBox(height: 10),
           
           // ✅ MENSAJE FINAL SIMPLE
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.red[50],
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.remove_circle,
-                  color: Colors.red[600],
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Salir restará puntos',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+           Container(
+             padding: const EdgeInsets.all(10),
+             decoration: BoxDecoration(
+               color: Colors.red[50],
+               borderRadius: BorderRadius.circular(6),
+             ),
+             child: Row(
+               children: [
+                 Icon(
+                   Icons.remove_circle,
+                   color: Colors.red[600],
+                   size: 16,
+                 ),
+                 const SizedBox(width: 8),
+                 const Expanded(
+                   child: Text(
+                     'Usar otras apps o contestar llamadas restará puntos',
+                     style: TextStyle(
+                       fontSize: 11,
+                       color: Colors.black87,
+                       fontWeight: FontWeight.w500,
+                     ),
+                   ),
+                 ),
+               ],
+             ),
+           ),
           
           const SizedBox(height: 6),
           

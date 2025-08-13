@@ -1,9 +1,16 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">  <!-- AGREGAR -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- ✅ AGREGAR SOLO ESTOS PERMISOS -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     
+    <!-- ✅ NUEVOS PERMISOS PARA EL MONITOREO -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- (El permiso de uso requiere que el usuario lo habilite manualmente en Ajustes) -->
+
     <application
         android:label="ruta_map_frontend"
         android:name="${applicationName}"
