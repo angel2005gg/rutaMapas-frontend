@@ -10,6 +10,7 @@ import '../services/points_service.dart';
 import '../widgets/points_animation_widget.dart';
 import '../services/distraction_monitor_service.dart'; // ✅ NUEVO
 import '../config/scoring_config.dart'; // ✅ NUEVO
+import '../widgets/driving_safety_overlay.dart';
 
 class NavigationScreen extends StatefulWidget {
   final LatLng destino;
@@ -30,7 +31,7 @@ class NavigationScreen extends StatefulWidget {
 }
 
 class _NavigationScreenState extends State<NavigationScreen>
-    with WidgetsBindingObserver { // ✅ AGREGAR ESTE MIXIN
+    with WidgetsBindingObserver {
   GoogleMapController? _mapController;
   Position? _currentPosition;
   StreamSubscription<Position>? _positionStream;
@@ -59,17 +60,18 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   final DistractionMonitorService _monitor = DistractionMonitorService.instance; // ✅ NUEVO
 
+  // ✅ NUEVO: Variable para overlay de seguridad
+  bool _showAvisoSeguridad = true; // ✅ mostrar overlay al iniciar
+
   @override
   void initState() {
     super.initState();
     _loadPreferences();
     _iniciarNavegacion();
-
     WidgetsBinding.instance.addObserver(this);
     _navegacionActiva = true;
-
-    // ✅ Iniciar monitoreo de distracciones al comenzar navegación
     _monitor.startSession();
+    // _showAvisoSeguridad ya true por defecto
   }
 
   @override
@@ -608,6 +610,12 @@ class _NavigationScreenState extends State<NavigationScreen>
                   onAnimationComplete: _onAnimacionPuntosComplete,
                 ),
               ),
+            ),
+
+          // ✅ NUEVO: OVERLAY DE SEGURIDAD (siempre arriba)
+          if (_showAvisoSeguridad)
+            DrivingSafetyOverlay(
+              onAccept: () => setState(() => _showAvisoSeguridad = false),
             ),
         ],
       ),
