@@ -106,7 +106,13 @@ class MainActivity: FlutterActivity() {
     private fun queryForegroundCount(start: Long, end: Long): Int {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return 0
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val events = usm.queryEvents(start, end)
+
+        // Buffers para no perder eventos por milisegundos
+        var s = start - 5_000
+        var e = end + 1_000
+        if (e <= s) e = s + 1_000
+
+        val events = usm.queryEvents(s, e)
         val own = applicationContext.packageName
         val excluded = setOf(
             own,
@@ -117,19 +123,50 @@ class MainActivity: FlutterActivity() {
             "com.sec.android.inputmethod",
             "com.google.android.dialer",
             "com.android.launcher",
-            "com.google.android.apps.nexuslauncher"
+            "com.google.android.apps.nexuslauncher",
+            // MIUI comunes
+            "com.miui.home",
+            "com.miui.securitycenter",
+            "com.miui.analytics",
+            "com.miui.systemAdSolution"
         )
+
         val set = HashSet<String>()
         val ev = UsageEvents.Event()
+        var totalFg = 0
         while (events.hasNextEvent()) {
             events.getNextEvent(ev)
-            if (ev.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                val pkg = ev.packageName ?: continue
+            val type = ev.eventType
+            val pkg = ev.packageName ?: continue
+
+            val isMoveToForeground = type == UsageEvents.Event.MOVE_TO_FOREGROUND
+            val isActivityResumed = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                    type == UsageEvents.Event.ACTIVITY_RESUMED)
+
+            if (isMoveToForeground || isActivityResumed) {
+                totalFg++
                 if (!excluded.contains(pkg) && !pkg.startsWith("com.android")) {
                     set.add(pkg)
                 }
             }
         }
+
+        // Fallback: si no hubo eventos, intenta por uso diario (último uso en ventana)
+        if (set.isEmpty()) {
+            val daily = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, s, e)
+            if (daily != null) {
+                daily.forEach { us ->
+                    val pkg = us.packageName ?: return@forEach
+                    val last = us.lastTimeUsed
+                    val usedInWindow = last in s..e && us.totalTimeInForeground > 0
+                    if (usedInWindow && !excluded.contains(pkg) && !pkg.startsWith("com.android")) {
+                        set.add(pkg)
+                    }
+                }
+            }
+        }
+
+        android.util.Log.d("UsageStats", "window=[$s,$e] fgEvents=$totalFg distinct=${set.size} -> $set")
         return set.size
     }
 }

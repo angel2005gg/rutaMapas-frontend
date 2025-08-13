@@ -89,7 +89,8 @@ class DistractionMonitorService {
 
   void markBackgroundStart() {
     if (!_sessionActiva) return;
-    _bgStart = DateTime.now(); // se mantiene por compatibilidad (no penalizamos apps)
+    // No sobrescribir si ya está marcada (evita ventanas muy cortas)
+    _bgStart ??= DateTime.now();
   }
 
   Future<DistractionSummary> summarizeOnForeground() async {
@@ -103,21 +104,27 @@ class DistractionMonitorService {
       );
     }
 
-    // Llamadas (deltas)
     final nuevasContestadas = _llamadasContestadasTotal - _contestadasReportadas;
     final nuevasNoContestadas = _llamadasNoContestadasTotal - _noContestadasReportadas;
     _contestadasReportadas = _llamadasContestadasTotal;
     _noContestadasReportadas = _llamadasNoContestadasTotal;
 
-    // Apps abiertas durante background
     int appsAbiertas = 0;
     if (_bgStart != null && Platform.isAndroid) {
       try {
+        // Dar más tiempo para que UsageStats escriba eventos
+        await Future.delayed(const Duration(milliseconds: 1200));
+
         final hasUsage = await _hasUsagePermission();
         if (hasUsage == true) {
-          appsAbiertas = await _contarAppsAbiertasEntre(_bgStart!, DateTime.now());
+          // Ampliar la ventana (buffer) para no perder eventos
+          final start = _bgStart!.subtract(const Duration(seconds: 5));
+          final end = DateTime.now().add(const Duration(seconds: 1));
+          appsAbiertas = await _contarAppsAbiertasEntre(start, end);
+          print('📊 UsageStats: ${start.millisecondsSinceEpoch} → ${end.millisecondsSinceEpoch} = $appsAbiertas app(s) '
+                '(duración ${(end.difference(start)).inSeconds}s)');
         } else {
-          print('ℹ️ Sin permiso de uso: no se contabilizan apps.');
+          print('ℹ️ Sin permiso de Acceso al uso (no se contabilizan apps). Abre Ajustes desde el aviso inicial.');
         }
       } catch (e) {
         print('❌ Error consultando UsageStats: $e');
@@ -163,16 +170,13 @@ class DistractionMonitorService {
   // ✅ Bridging a Android
   Future<bool?> _hasUsagePermission() async {
     try {
-      return await _usageChannel.invokeMethod<bool>('hasPermission');
-    } catch (_) {
+      final ok = await _usageChannel.invokeMethod<bool>('hasPermission');
+      print('🔐 hasUsagePermission => $ok');
+      return ok;
+    } catch (e) {
+      print('❌ hasUsagePermission error: $e');
       return false;
     }
-  }
-
-  Future<void> _openUsageSettings() async {
-    try {
-      await _usageChannel.invokeMethod('openSettings');
-    } catch (_) {}
   }
 
   Future<int> _contarAppsAbiertasEntre(DateTime start, DateTime end) async {
@@ -181,8 +185,10 @@ class DistractionMonitorService {
         'start': start.millisecondsSinceEpoch,
         'end': end.millisecondsSinceEpoch,
       });
+      print('📈 queryForegroundCount => ${count ?? 0}');
       return count ?? 0;
-    } catch (_) {
+    } catch (e) {
+      print('❌ queryForegroundCount error: $e');
       return 0;
     }
   }
@@ -191,6 +197,16 @@ class DistractionMonitorService {
     final phonePerm = await Permission.phone.status;
     if (!phonePerm.isGranted) {
       await Permission.phone.request();
+    }
+  }
+
+  // ✅ Abrir pantalla de "Acceso al uso" (Android)
+  Future<void> _openUsageSettings() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _usageChannel.invokeMethod('openSettings');
+    } catch (e) {
+      print('❌ openUsageSettings error: $e');
     }
   }
 
