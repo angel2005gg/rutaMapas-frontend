@@ -38,6 +38,9 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
   bool _mostrandoRuta = false;
   MapType _currentMapType = MapType.normal;
 
+  // ✅ NUEVO: trackear permiso para activar el punto azul en release
+  bool _hasLocationPermission = false;
+
   // ✅ NUEVAS VARIABLES
   bool _is3DMode = true; // Por defecto 3D
   bool _isFollowingUser = false; // Si está siguiendo al usuario
@@ -89,6 +92,7 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
   void initState() {
     super.initState();
     _loadPreferences();
+    _checkAndRequestLocationPermission(); // ✅ primero pide permiso
     _getCurrentLocation();
   }
 
@@ -107,23 +111,43 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
     print('📱 Preferencia de vista cargada: ${_is3DMode ? "3D" : "2D"}');
   }
 
-  Future<void> _getCurrentLocation() async {
+  // ✅ NUEVO: asegurar permiso y servicio de ubicación
+  Future<void> _checkAndRequestLocationPermission() async {
     try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        // Opcional: abrir ajustes si está apagado
+        // await Geolocator.openLocationSettings();
+      }
+
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          setState(() {
-            _errorMessage = 'Permisos de ubicación denegados';
-            _isLoading = false;
-          });
-          return;
-        }
       }
 
-      if (permission == LocationPermission.deniedForever) {
+      final granted = permission == LocationPermission.always ||
+                      permission == LocationPermission.whileInUse;
+      if (mounted) {
         setState(() {
-          _errorMessage = 'Permisos de ubicación permanentemente denegados';
+          _hasLocationPermission = granted;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasLocationPermission = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      // ✅ usar el helper y salir si no hay permiso
+      await _checkAndRequestLocationPermission();
+      if (!_hasLocationPermission) {
+        setState(() {
+          _errorMessage = 'Permiso de ubicación no concedido';
           _isLoading = false;
         });
         return;
@@ -570,12 +594,11 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
             print('✅ Mapa creado exitosamente');
           },
           onCameraMove: (CameraPosition position) {
-            // Forzar rebuild de los globos cuando se mueva el mapa
             if (_mostrandoRutasMultiples && _rutasDisponibles.isNotEmpty) {
-              setState(() {}); // Esto hará que se recalculen las posiciones
+              setState(() {});
             }
           },
-          myLocationEnabled: true,
+          myLocationEnabled: _hasLocationPermission, // ✅ se activa tras permiso
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
           compassEnabled: true,
@@ -590,11 +613,10 @@ class _GoogleMapWidgetState extends State<GoogleMapWidget> {
             right: 20,
           ),
           onLongPress: (LatLng position) {
-    // Solo mostrar info si hay rutas disponibles
-    if (_rutasDisponibles.isNotEmpty) {
-      _showRouteInfoDialog();
-    }
-  },
+            if (_rutasDisponibles.isNotEmpty) {
+              _showRouteInfoDialog();
+            }
+          },
         ),
         
         // ✅ LOADING/ERROR OVERLAYS (sin cambios)
