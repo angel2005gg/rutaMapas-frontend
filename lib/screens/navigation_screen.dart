@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // ✅ NUEVO
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
-import '../widgets/map_view_toggle.dart'; // ✅ NUEVO IMPORT
-import '../widgets/center_location_button.dart'; // ✅ NUEVO IMPORT
-// ✅ AGREGAR ESTOS IMPORTS AL INICIO
+import '../widgets/map_view_toggle.dart';
+import '../widgets/center_location_button.dart';
 import '../services/points_service.dart';
 import '../widgets/points_animation_widget.dart';
-import '../services/distraction_monitor_service.dart'; // ✅ NUEVO
-import '../config/scoring_config.dart'; // ✅ NUEVO
+import '../services/distraction_monitor_service.dart';
 import '../widgets/driving_safety_overlay.dart';
+import '../widgets/route_points_history_widget.dart'; // RoutePointEvent
+import '../widgets/route_points_summary_sheet.dart';
 
 class NavigationScreen extends StatefulWidget {
   final LatLng destino;
@@ -54,14 +54,17 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _puntosInicioOtorgados = false; // Para dar puntos solo 1 vez al iniciar
 
   // ✅ NUEVAS VARIABLES para detección de salida:
-  bool _appEnPrimerPlano = true;
-  DateTime? _tiempoSalidaApp;
   bool _navegacionActiva = false;
 
   final DistractionMonitorService _monitor = DistractionMonitorService.instance; // ✅ NUEVO
 
   // ✅ NUEVO: Variable para overlay de seguridad
   bool _showAvisoSeguridad = true; // ✅ mostrar overlay al iniciar
+
+  // Historial en vivo de puntos de la ruta
+  final List<RoutePointEvent> _pointEvents = [];
+  // Flag para mostrar resumen final una sola vez
+  bool _finalResumenMostrado = false;
 
   @override
   void initState() {
@@ -94,7 +97,6 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (!_navegacionActiva) return;
 
     if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
-      _tiempoSalidaApp = DateTime.now();
       _monitor.markBackgroundStart();
       print('📱 App en background (monitoreo activo)');
     } else if (state == AppLifecycleState.resumed) {
@@ -116,6 +118,11 @@ class _NavigationScreenState extends State<NavigationScreen>
           _puntosAnimacion = resumen.deltaPuntos.abs();
           _puntosPositivos = resumen.deltaPuntos > 0;
           _motivoPuntos = motivo;
+          _pointEvents.add(RoutePointEvent(
+            puntos: resumen.deltaPuntos,
+            motivo: motivo,
+            timestamp: DateTime.now(),
+          ));
         });
 
         final resp = await PointsService.ajustarPuntosPorDistracciones(
@@ -132,28 +139,26 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   // 🚫 Desactivado: ya no se restan puntos por salir de la app
-  Future<void> _restarPuntosPorSalida() async {
-    print('ℹ️ _restarPuntosPorSalida() desactivado');
-    return; // no-op
-  }
+  // Future<void> _restarPuntosPorSalida() async {
+  //   print('ℹ️ _restarPuntosPorSalida() desactivado');
+  //   return; // no-op
+  // }
 
-  // ✅ NUEVO: Mostrar notificación cuando regresa
-  void _mostrarNotificacionRegreso() {
-    if (_tiempoSalidaApp != null) {
-      final tiempoFuera = DateTime.now().difference(_tiempoSalidaApp!);
-      final minutosFuera = tiempoFuera.inMinutes;
-      
-      // Solo mostrar si estuvo fuera más de 3 segundos
-      if (tiempoFuera.inSeconds > 3) {
-        setState(() {
-          _puntosAnimacion = -10; // Puntos restados
-          _puntosPositivos = false;
-          _motivoPuntos = 'Saliste ${minutosFuera}min';
-          _mostrandoAnimacionPuntos = true;
-        });
-      }
-    }
-  }
+  // ✅ NUEVO: Mostrar notificación cuando regresa (no usado)
+  // void _mostrarNotificacionRegreso() {
+  //   if (_tiempoSalidaApp != null) {
+  //     final tiempoFuera = DateTime.now().difference(_tiempoSalidaApp!);
+  //     final minutosFuera = tiempoFuera.inMinutes;
+  //     if (tiempoFuera.inSeconds > 3) {
+  //       setState(() {
+  //         _puntosAnimacion = -10;
+  //         _puntosPositivos = false;
+  //         _motivoPuntos = 'Saliste ${minutosFuera}min';
+  //         _mostrandoAnimacionPuntos = true;
+  //       });
+  //     }
+  //   }
+  // }
 
   // ✅ NUEVO: Cargar preferencias 2D/3D
   Future<void> _loadPreferences() async {
@@ -243,10 +248,57 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     });
 
-    // ✅ NUEVO: DETECTAR LLEGADA AL DESTINO
-    if (distanciaMetros <= 50 && !_puntosInicioOtorgados) { // 50 metros = llegada
+    // ✅ NUEVO: DETECTAR LLEGADA AL DESTINO (mostrar una sola vez)
+    if (distanciaMetros <= 50 && !_finalResumenMostrado) {
+      _finalResumenMostrado = true;
       _otorgarPuntosRutaCompletada();
+      // Abrir resumen final con felicitación
+      _mostrarResumenFinal();
     }
+  }
+
+  void _mostrarResumenFinal() {
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.45,
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          builder: (_, controller) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              padding: const EdgeInsets.only(top: 8),
+              child: SingleChildScrollView(
+                controller: controller,
+                child: RoutePointsSummarySheet(
+                  events: _pointEvents,
+                  esFinal: true,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _abrirHistoriaManual() {
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => RoutePointsSummarySheet(events: _pointEvents),
+    );
   }
 
   // ✅ NUEVO: Toggle entre 2D y 3D en navegación
@@ -323,11 +375,17 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (result['status'] == 'success') {
         // ✅ MOSTRAR ANIMACIÓN DE PUNTOS
         setState(() {
-          _puntosAnimacion = result['puntos_cambio'];
+          final delta = result['puntos_cambio'] is int ? result['puntos_cambio'] as int : int.tryParse('${result['puntos_cambio']}') ?? 0;
+          _puntosAnimacion = delta;
           _puntosPositivos = true;
           _motivoPuntos = mostrarPuntosRacha ? 'Inicio + Racha' : 'Inicio';
           _mostrandoAnimacionPuntos = true;
           _puntosInicioOtorgados = true;
+          _pointEvents.add(RoutePointEvent(
+            puntos: delta,
+            motivo: _motivoPuntos ?? 'Inicio',
+            timestamp: DateTime.now(),
+          ));
         });
         
         print('✅ Puntos otorgados: +${result['puntos_cambio']}');
@@ -361,10 +419,16 @@ class _NavigationScreenState extends State<NavigationScreen>
       
       if (result['status'] == 'success') {
         setState(() {
-          _puntosAnimacion = result['puntos_cambio'];
+          final delta = result['puntos_cambio'] is int ? result['puntos_cambio'] as int : int.tryParse('${result['puntos_cambio']}') ?? 0;
+          _puntosAnimacion = delta;
           _puntosPositivos = true;
           _motivoPuntos = 'Completada';
           _mostrandoAnimacionPuntos = true;
+          _pointEvents.add(RoutePointEvent(
+            puntos: delta,
+            motivo: 'Ruta completada',
+            timestamp: DateTime.now(),
+          ));
         });
         
         print('✅ Puntos por completar ruta: +${result['puntos_cambio']}');
@@ -612,6 +676,20 @@ class _NavigationScreenState extends State<NavigationScreen>
                 ),
               ),
             ),
+
+          // ✅ NUEVO: Botón flotante para abrir historial cuando se quiera
+          Positioned(
+            bottom: 130,
+            right: 16,
+            child: FloatingActionButton.small(
+              heroTag: 'historial_puntos',
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF1565C0),
+              elevation: 4,
+              onPressed: _abrirHistoriaManual,
+              child: const Icon(Icons.receipt_long),
+            ),
+          ),
 
           // ✅ NUEVO: OVERLAY DE SEGURIDAD (siempre arriba)
           if (_showAvisoSeguridad)
