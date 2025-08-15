@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'dart:ui' as ui; // Flecha de navegación dibujada
 import '../widgets/map_view_toggle.dart';
 import '../widgets/center_location_button.dart';
 import '../services/points_service.dart';
@@ -45,6 +46,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _isFollowingUser = true; // Por defecto SIEMPRE siguiendo en navegación
   StreamSubscription<Position>? _locationSubscription;
 
+  // ✅ Icono de flecha de navegación
+  BitmapDescriptor? _navArrowIcon;
+
   // ✅ AGREGAR DESPUÉS DE LAS VARIABLES EXISTENTES:
   // Variables para puntos
   bool _mostrandoAnimacionPuntos = false;
@@ -71,6 +75,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     super.initState();
     _loadPreferences();
     _iniciarNavegacion();
+    _loadNavArrowIcon(); // Cargar flecha de navegación
     WidgetsBinding.instance.addObserver(this);
     _navegacionActiva = true;
     _monitor.startSession();
@@ -87,6 +92,76 @@ class _NavigationScreenState extends State<NavigationScreen>
     _monitor.stopSession();
 
     super.dispose();
+  }
+
+  // ✅ DIBUJAR ICONO DE FLECHA PARA NAVEGACIÓN
+  Future<void> _loadNavArrowIcon() async {
+    try {
+      const double size = 120; // px
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+
+      // Fondo transparente
+      final bgPaint = Paint()..color = const Color(0x00000000);
+      canvas.drawRect(Rect.fromLTWH(0, 0, size, size), bgPaint);
+
+      // Sombra sutil
+      final shadowPaint = Paint()
+        ..color = Colors.black.withOpacity(0.15)
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 6);
+
+      // Flecha principal (triángulo)
+      final arrowColor = const Color(0xFF1565C0);
+      final arrowPaint = Paint()
+        ..color = arrowColor
+        ..style = PaintingStyle.fill;
+      final borderPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4;
+
+      final Path head = Path()
+        ..moveTo(size * 0.5, size * 0.12) // punta arriba
+        ..lineTo(size * 0.78, size * 0.56)
+        ..lineTo(size * 0.22, size * 0.56)
+        ..close();
+
+      // Cola de la flecha
+      final RRect tail = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(size * 0.5, size * 0.78),
+          width: size * 0.18,
+          height: size * 0.34,
+        ),
+        Radius.circular(size * 0.09),
+      );
+
+      // Dibujar sombra
+      canvas.save();
+      canvas.translate(2, 4);
+      canvas.drawPath(head, shadowPaint);
+      canvas.drawRRect(tail, shadowPaint);
+      canvas.restore();
+
+      // Dibujar flecha
+      canvas.drawPath(head, arrowPaint);
+      canvas.drawPath(head, borderPaint);
+      canvas.drawRRect(tail, arrowPaint);
+      canvas.drawRRect(tail, borderPaint);
+
+      final picture = recorder.endRecording();
+      final img = await picture.toImage(size.toInt(), size.toInt());
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = byteData!.buffer.asUint8List();
+
+      if (!mounted) return;
+      setState(() {
+        _navArrowIcon = BitmapDescriptor.fromBytes(bytes);
+      });
+    } catch (e) {
+      // Si falla, no bloquea UI
+      debugPrint('Error generando icono de flecha: $e');
+    }
   }
 
   // ✅ DETECCIÓN de ciclo de vida: medimos sólo cuando hay navegación activa
@@ -169,9 +244,6 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   Future<void> _iniciarNavegacion() async {
-    // Crear icono de flecha personalizado
-    
-    
     // Obtener ubicación inicial
     final position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.bestForNavigation,
@@ -197,8 +269,6 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     });
   }
-
-  
 
   // ✅ MODIFICAR TODO EL MÉTODO _onLocationUpdate:
   void _onLocationUpdate(Position position) {
@@ -445,6 +515,43 @@ class _NavigationScreenState extends State<NavigationScreen>
     });
   }
 
+  // ✅ Construir marcadores (flecha + destino)
+  Set<Marker> _buildMarkers() {
+    final set = <Marker>{};
+
+    // Marcador de destino
+    set.add(
+      Marker(
+        markerId: const MarkerId('destino'),
+        position: widget.destino,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(
+          title: widget.nombreDestino,
+          snippet: 'Destino',
+        ),
+        zIndex: 1,
+      ),
+    );
+
+    // Flecha de navegación en la ubicación actual
+    if (_currentPosition != null && _navArrowIcon != null) {
+      final bearing = _currentPosition!.heading >= 0 ? _currentPosition!.heading : 0.0;
+      set.add(
+        Marker(
+          markerId: const MarkerId('nav_arrow'),
+          position: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+          icon: _navArrowIcon!,
+          rotation: bearing,
+          flat: true,
+          anchor: const Offset(0.5, 0.5),
+          zIndex: 9999,
+        ),
+      );
+    }
+
+    return set;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -464,7 +571,7 @@ class _NavigationScreenState extends State<NavigationScreen>
               _mapController = controller;
               _mapController!.setMapStyle(null); // Estilo claro para navegación
             },
-            myLocationEnabled: true, // ✅ ACTIVAR punto azul nativo de Google
+            myLocationEnabled: false, // ⛔️ Ocultar punto azul durante navegación
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             compassEnabled: false,
@@ -498,18 +605,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                 patterns: [],
               ),
             },
-            markers: {
-              // Solo marcador de destino
-              Marker(
-                markerId: const MarkerId('destino'),
-                position: widget.destino,
-                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                infoWindow: InfoWindow(
-                  title: widget.nombreDestino,
-                  snippet: 'Destino',
-                ),
-              ),
-            },
+            markers: _buildMarkers(),
           ),
 
           // ✅ HEADER CON INFORMACIÓN (sin cambios)
