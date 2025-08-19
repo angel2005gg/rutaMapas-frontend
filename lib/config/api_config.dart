@@ -1,6 +1,10 @@
 class ApiConfig {
   // ✅ CONFIGURACIÓN CENTRAL - Solo cambiar aquí para toda la app
-  static const String baseUrl = 'http://192.168.0.134:8000/api';
+  // Producción
+  static const String baseUrl = 'http://api.kamati.co/api';
+  
+  // Desarrollo (dejar como referencia)
+  // static const String baseUrl = 'http://192.168.0.134:8000/api';
   
   // ✅ URLs específicas (opcional - para mejor organización)
   static const String authUrl = '$baseUrl/auth';

@@ -103,51 +103,59 @@ class _PointsAnimationWidgetState extends State<PointsAnimationWidget>
             opacity: _fadeAnimation,
             child: ScaleTransition(
               scale: _scaleAnimation,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: widget.esPositivo 
-                      ? Colors.green.withOpacity(0.9)
-                      : Colors.red.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (widget.esPositivo ? Colors.green : Colors.red)
-                          .withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      widget.esPositivo ? Icons.add_circle : Icons.remove_circle,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${widget.esPositivo ? '+' : ''}${widget.puntos} pts',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (widget.motivo != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        '• ${widget.motivo}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: widget.esPositivo 
+                        ? Colors.green.withOpacity(0.9)
+                        : Colors.red.withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (widget.esPositivo ? Colors.green : Colors.red)
+                            .withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
                     ],
-                  ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.esPositivo ? Icons.add_circle : Icons.remove_circle,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${widget.esPositivo ? '+' : ''}${widget.puntos} pts',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (widget.motivo != null && widget.motivo!.trim().isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '• ${widget.motivo}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.95),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),

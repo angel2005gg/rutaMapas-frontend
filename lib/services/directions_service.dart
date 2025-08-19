@@ -6,59 +6,104 @@ class DirectionsService {
   static const String _apiKey = 'AIzaSyCP1xS8HLdxQe-a1KeuXGQzaVIqoQvKmYo';
   static const String _baseUrl = 'https://maps.googleapis.com/maps/api/directions';
 
-  // ✅ CALCULAR RUTA ENTRE DOS PUNTOS
+  // ✅ CALCULAR RUTA ENTRE DOS PUNTOS (mejorada precisión)
   static Future<Map<String, dynamic>?> calcularRuta({
     required LatLng origen,
     required LatLng destino,
     String modo = 'driving', // driving, walking, bicycling, transit
   }) async {
     try {
+      // Usar overview=full para una geometría más densa y departure_time=now para tráfico
       final url = '$_baseUrl/json?'
           'origin=${origen.latitude},${origen.longitude}&'
           'destination=${destino.latitude},${destino.longitude}&'
           'mode=$modo&'
+          'alternatives=true&' // permite evaluar varias rutas
           'language=es&'
           'region=co&' // Colombia
+          'units=metric&'
+          'overview=full&'
+          // Tráfico solo aplica a driving
+          '${modo == 'driving' ? 'departure_time=now&traffic_model=best_guess&' : ''}'
           'key=$_apiKey';
 
       print('🛣️ Calculando ruta: $url');
 
       final response = await http.get(Uri.parse(url));
-      
+
       print('📱 Directions API Status: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
+
         print('📊 Directions Response status: ${data['status']}');
-        
+
         if (data['status'] == 'OK' && data['routes'] != null && data['routes'].isNotEmpty) {
-          final route = data['routes'][0];
-          final leg = route['legs'][0];
-          
-          // ✅ DECODIFICAR POLYLINE
-          final puntos = _decodificarPolyline(route['overview_polyline']['points']);
-          
+          // ✅ Elegir la mejor ruta considerando duración en tráfico (si existe)
+          final routes = List<Map<String, dynamic>>.from(data['routes']);
+          Map<String, dynamic> bestRoute = routes.first;
+          int bestScore = _getDurationScore(bestRoute);
+          for (final r in routes.skip(1)) {
+            final score = _getDurationScore(r);
+            if (score < bestScore) {
+              bestRoute = r;
+              bestScore = score;
+            }
+          }
+
+          final leg = bestRoute['legs'][0];
+
+          // ✅ POLILÍNEA DETALLADA: concatenar polilíneas de cada paso para seguir calzadas reales
+          final List<LatLng> detailedPoints = [];
+          final steps = List<Map<String, dynamic>>.from(leg['steps']);
+          for (final step in steps) {
+            final encoded = step['polyline']?['points'];
+            if (encoded is String && encoded.isNotEmpty) {
+              final pts = _decodificarPolyline(encoded);
+              if (detailedPoints.isNotEmpty && pts.isNotEmpty &&
+                  detailedPoints.last.latitude == pts.first.latitude &&
+                  detailedPoints.last.longitude == pts.first.longitude) {
+                // evitar duplicar el punto de unión
+                detailedPoints.addAll(pts.skip(1));
+              } else {
+                detailedPoints.addAll(pts);
+              }
+            }
+          }
+
+          // ✅ POLILÍNEA OVERVIEW (respaldo)
+          final overviewEncoded = bestRoute['overview_polyline']?['points'];
+          final overviewPoints = (overviewEncoded is String && overviewEncoded.isNotEmpty)
+              ? _decodificarPolyline(overviewEncoded)
+              : <LatLng>[];
+
+          // Usar la detallada si tiene suficiente densidad; si no, fallback al overview
+          final puntos = detailedPoints.length >= 10 ? detailedPoints : overviewPoints;
+
           // ✅ EXTRAER INFORMACIÓN DE LA RUTA
           final distancia = leg['distance']['text'];
           final duracion = leg['duration']['text'];
-          
+          final duracionEnTrafico = leg['duration_in_traffic']?['text'];
+
           // ✅ OBTENER INSTRUCCIONES PASO A PASO
-          final pasos = _extraerPasos(leg['steps']);
-          
-          final resumen = '$distancia • $duracion';
-          
+          final pasos = _extraerPasos(steps);
+
+          final resumen = duracionEnTrafico != null
+              ? '$distancia • $duracionEnTrafico'
+              : '$distancia • $duracion';
+
           print('✅ Ruta calculada: $resumen');
-          print('📍 ${puntos.length} puntos en la ruta');
+          print('📍 ${puntos.length} puntos en la ruta (detallados=${detailedPoints.length}, overview=${overviewPoints.length})');
           print('👣 ${pasos.length} pasos de navegación');
-          
+
           return {
             'puntos_ruta': puntos,
             'resumen': resumen,
             'distancia': distancia,
             'duracion': duracion,
+            if (duracionEnTrafico != null) 'duracion_trafico': duracionEnTrafico,
             'pasos': pasos,
-            'data_completa': data, // Por si necesitas más información
+            'data_completa': data,
           };
         } else {
           print('❌ Directions API Error: ${data['status']} - ${data['error_message'] ?? 'Sin mensaje'}');
@@ -67,12 +112,24 @@ class DirectionsService {
         print('❌ HTTP Error: ${response.statusCode}');
         print('❌ Response: ${response.body}');
       }
-      
+
       return null;
     } catch (e) {
       print('❌ Exception en calcularRuta: $e');
       return null;
     }
+  }
+
+  // ✅ Score para elegir ruta: duration_in_traffic.value si existe, si no duration.value
+  static int _getDurationScore(Map<String, dynamic> route) {
+    try {
+      final leg = route['legs'][0];
+      final dTraffic = leg['duration_in_traffic']?['value'];
+      if (dTraffic is int) return dTraffic;
+      final d = leg['duration']?['value'];
+      if (d is int) return d;
+    } catch (_) {}
+    return 1 << 30; // grande por defecto
   }
 
   // ✅ DECODIFICAR POLYLINE DE GOOGLE MAPS
@@ -119,7 +176,7 @@ class DirectionsService {
           .replaceAll(RegExp(r'<[^>]*>'), '') // Quitar tags HTML
           .replaceAll('&nbsp;', ' ') // Reemplazar espacios HTML
           .trim();
-      
+
       return {
         'instruccion': instruccion,
         'distancia': step['distance']['text'],

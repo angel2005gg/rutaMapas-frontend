@@ -61,7 +61,7 @@ class _MapTypeSelectorState extends State<MapTypeSelector> {
           _buildMapTypeOption(
             mapType: MapType.terrain, // ✅ USAR TERRAIN como "claro"
             icon: Icons.terrain,
-            label: 'Claro',
+            label: 'Montaña',
             isSelected: widget.currentMapType == MapType.terrain,
           ),
           const SizedBox(height: 8),

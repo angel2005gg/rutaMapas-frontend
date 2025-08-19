@@ -12,6 +12,7 @@ import '../services/distraction_monitor_service.dart';
 import '../widgets/driving_safety_overlay.dart';
 import '../widgets/route_points_history_widget.dart'; // RoutePointEvent
 import '../widgets/route_points_summary_sheet.dart';
+import 'dart:math' as math; // ➕ Para cálculos de navegación
 
 class NavigationScreen extends StatefulWidget {
   final LatLng destino;
@@ -46,6 +47,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _isFollowingUser = true; // Por defecto SIEMPRE siguiendo en navegación
   StreamSubscription<Position>? _locationSubscription;
 
+  // ➕ Evita desactivar seguimiento durante movimientos programáticos
+  bool _isProgrammaticCameraMove = false;
+
   // ✅ Icono de flecha de navegación
   BitmapDescriptor? _navArrowIcon;
 
@@ -69,6 +73,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   final List<RoutePointEvent> _pointEvents = [];
   // Flag para mostrar resumen final una sola vez
   bool _finalResumenMostrado = false;
+
+  // ➕ Estado de ruta y progreso (flecha en polyline)
+  List<LatLng> _route = [];
+  int _progressIndex = 0;
+  LatLng? _arrowPos;
+  double _arrowBearing = 0.0;
+  Set<Polyline> _navPolylines = {};
 
   @override
   void initState() {
@@ -99,41 +110,41 @@ class _NavigationScreenState extends State<NavigationScreen>
     try {
       const double size = 120; // px
       final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
+      final canvas = ui.Canvas(recorder);
 
       // Fondo transparente
-      final bgPaint = Paint()..color = const Color(0x00000000);
-      canvas.drawRect(Rect.fromLTWH(0, 0, size, size), bgPaint);
+      final bgPaint = ui.Paint()..color = const Color(0x00000000);
+      canvas.drawRect(ui.Rect.fromLTWH(0, 0, size, size), bgPaint);
 
       // Sombra sutil
-      final shadowPaint = Paint()
+      final shadowPaint = ui.Paint()
         ..color = Colors.black.withOpacity(0.15)
         ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 6);
 
       // Flecha principal (triángulo)
       final arrowColor = const Color(0xFF1565C0);
-      final arrowPaint = Paint()
+      final arrowPaint = ui.Paint()
         ..color = arrowColor
-        ..style = PaintingStyle.fill;
-      final borderPaint = Paint()
+        ..style = ui.PaintingStyle.fill;
+      final borderPaint = ui.Paint()
         ..color = Colors.white
-        ..style = PaintingStyle.stroke
+        ..style = ui.PaintingStyle.stroke
         ..strokeWidth = 4;
 
-      final Path head = Path()
+      final ui.Path head = ui.Path()
         ..moveTo(size * 0.5, size * 0.12) // punta arriba
         ..lineTo(size * 0.78, size * 0.56)
         ..lineTo(size * 0.22, size * 0.56)
         ..close();
 
       // Cola de la flecha
-      final RRect tail = RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(size * 0.5, size * 0.78),
+      final ui.RRect tail = ui.RRect.fromRectAndRadius(
+        ui.Rect.fromCenter(
+          center: ui.Offset(size * 0.5, size * 0.78),
           width: size * 0.18,
           height: size * 0.34,
         ),
-        Radius.circular(size * 0.09),
+        ui.Radius.circular(size * 0.09),
       );
 
       // Dibujar sombra
@@ -184,28 +195,50 @@ class _NavigationScreenState extends State<NavigationScreen>
       final resumen = await _monitor.summarizeOnForeground();
       if (!mounted) return;
 
-      final motivo = resumen.motivo.isEmpty ? 'Resumen de distracciones' : resumen.motivo;
-
-      // ✅ Si hay delta, mostrar animación y enviar ajuste
-      if (resumen.deltaPuntos != 0) {
+      // Mostrar burbujas separadas por categoría para evitar confusiones
+      void _pushEvent(int puntos, String motivo) {
+        if (puntos == 0) return;
+        _pointEvents.add(RoutePointEvent(
+          puntos: puntos,
+          motivo: motivo,
+          timestamp: DateTime.now(),
+        ));
         setState(() {
           _mostrandoAnimacionPuntos = true;
-          _puntosAnimacion = resumen.deltaPuntos.abs();
-          _puntosPositivos = resumen.deltaPuntos > 0;
+          _puntosAnimacion = puntos.abs();
+          _puntosPositivos = puntos > 0;
           _motivoPuntos = motivo;
-          _pointEvents.add(RoutePointEvent(
-            puntos: resumen.deltaPuntos,
-            motivo: motivo,
-            timestamp: DateTime.now(),
-          ));
         });
+      }
 
-        final resp = await PointsService.ajustarPuntosPorDistracciones(
-          resumen.deltaPuntos,
-          'Distracciones durante la ruta: $motivo',
+      // Apps abiertas (si hubo)
+      if (resumen.deltaApps != 0) {
+        _pushEvent(resumen.deltaApps, '${resumen.appsAbiertas} app(s) abiertas');
+        await PointsService.ajustarPuntosPorDistracciones(
+          resumen.deltaApps,
+          'Uso de otras apps durante la ruta',
         );
-        print('🎯 Ajuste puntos distracciones: $resp');
-      } else {
+      }
+
+      // Llamadas contestadas (negativas)
+      if (resumen.deltaLlamadasContestadas != 0) {
+        _pushEvent(resumen.deltaLlamadasContestadas, '${resumen.llamadasContestadas} llamada(s) contestada(s)');
+        await PointsService.ajustarPuntosPorDistracciones(
+          resumen.deltaLlamadasContestadas,
+          'Llamada contestada en ruta',
+        );
+      }
+
+      // Llamadas rechazadas/no contestadas (positivas)
+      if (resumen.deltaLlamadasRechazadas != 0) {
+        _pushEvent(resumen.deltaLlamadasRechazadas, '${resumen.llamadasRechazadasONoContestadas} llamada(s) rechazadas/no contestadas');
+        await PointsService.ajustarPuntosPorDistracciones(
+          resumen.deltaLlamadasRechazadas,
+          'Llamada rechazada/no contestada (bien)',
+        );
+      }
+
+      if (resumen.deltaPuntos == 0) {
         print('✅ Sin cambios de puntos en este regreso');
       }
     } catch (e) {
@@ -244,14 +277,24 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   Future<void> _iniciarNavegacion() async {
-    // Obtener ubicación inicial
+    // Obtener ubicación inicial (solo para métricas; NO posiciona flecha)
     final position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.bestForNavigation,
     );
     
     setState(() {
       _currentPosition = position;
+      // ➕ Inicializar flecha al INICIO DE LA RUTA
+      _route = List<LatLng>.from(widget.puntosRuta);
+      _progressIndex = 0;
+      _arrowPos = _route.isNotEmpty ? _route.first : null;
+      _arrowBearing = (_route.length >= 2)
+          ? _bearingBetween(_route[0], _route[1])
+          : 0.0;
     });
+
+    // ➕ Construir polyline restante al inicio
+    _rebuildRemainingPolyline();
 
     // Iniciar seguimiento en tiempo real
     _positionStream = Geolocator.getPositionStream(
@@ -270,252 +313,114 @@ class _NavigationScreenState extends State<NavigationScreen>
     });
   }
 
-  // ✅ MODIFICAR TODO EL MÉTODO _onLocationUpdate:
+  // ➕ Recalcula polyline restante (recorta el tramo ya pasado)
+  void _rebuildRemainingPolyline() {
+    if (_route.isEmpty || _progressIndex >= _route.length - 1) {
+      setState(() => _navPolylines = {});
+      return;
+    }
+    final remaining = _route.sublist(_progressIndex);
+    setState(() {
+      _navPolylines = {
+        Polyline(
+          polylineId: const PolylineId('ruta_restante'),
+          points: remaining,
+          color: const Color(0xFF1565C0),
+          width: 6,
+        ),
+      };
+    });
+  }
+
+  // ➕ Avanza el progreso de la flecha sobre la ruta según la ubicación real
+  void _updateRouteProgress(Position pos) {
+    if (_route.isEmpty) return;
+
+    // Buscar el punto más cercano desde el índice actual hacia adelante (no retroceder)
+    double best = double.infinity;
+    int bestIdx = _progressIndex;
+    for (int i = _progressIndex; i < _route.length; i++) {
+      final p = _route[i];
+      final d = Geolocator.distanceBetween(
+        pos.latitude,
+        pos.longitude,
+        p.latitude,
+        p.longitude,
+      );
+      if (d < best) {
+        best = d;
+        bestIdx = i;
+        if (best < 8) break; // suficiente cercanía, salir temprano
+      }
+    }
+
+    // Actualizar progreso solo si avanzó
+    if (bestIdx > _progressIndex) {
+      setState(() {
+        _progressIndex = bestIdx;
+        _arrowPos = _route[_progressIndex];
+        if (_progressIndex + 1 < _route.length) {
+          _arrowBearing = _bearingBetween(
+            _route[_progressIndex],
+            _route[_progressIndex + 1],
+          );
+        }
+      });
+      _rebuildRemainingPolyline();
+    } else {
+      // Mantener orientación hacia el siguiente punto si existe
+      if (_progressIndex + 1 < _route.length) {
+        _arrowBearing = _bearingBetween(
+          _route[_progressIndex],
+          _route[_progressIndex + 1],
+        );
+      }
+      // Asegurar posición en el punto actual de la ruta
+      _arrowPos = _route[_progressIndex];
+    }
+  }
+
+  // ➕ Bearing geodésico entre dos coordenadas
+  double _bearingBetween(LatLng a, LatLng b) {
+    final lat1 = a.latitude * math.pi / 180.0;
+    final lat2 = b.latitude * math.pi / 180.0;
+    final dLon = (b.longitude - a.longitude) * math.pi / 180.0;
+    final y = math.sin(dLon) * math.cos(lat2);
+    final x = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
+    double brng = math.atan2(y, x);
+    brng = brng * 180.0 / math.pi;
+    return (brng + 360.0) % 360.0;
+  }
+
+  // ✅ MODIFICAR _onLocationUpdate para usar flecha y recorte
   void _onLocationUpdate(Position position) {
     setState(() {
       _currentPosition = position;
     });
 
-    // ✅ CENTRAR AUTOMÁTICAMENTE si está en modo seguimiento
-    if (_isFollowingUser && _mapController != null) {
-      // ✅ MEJORADO: Usar el heading (dirección) del GPS para rotar el mapa
-      final bearing = position.heading >= 0 ? position.heading : 0.0;
-      
+    _updateRouteProgress(position);
+
+    if (_isFollowingUser && _mapController != null && _arrowPos != null) {
+      _isProgrammaticCameraMove = true;
       _mapController!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
-            target: LatLng(position.latitude, position.longitude),
+            target: _arrowPos!,
             zoom: 18.0,
-            bearing: bearing, // ✅ ROTACIÓN AUTOMÁTICA según dirección de movimiento
+            bearing: _is3DMode ? _arrowBearing : 0.0,
             tilt: _is3DMode ? 60.0 : 0.0,
           ),
         ),
-      );
+      ).whenComplete(() {
+        // Esperar a onCameraIdle para limpiar bandera
+      });
     }
 
-    // Calcular distancia restante al destino
     _calcularDistanciaRestante(position);
   }
 
-  void _calcularDistanciaRestante(Position position) {
-    final distanciaMetros = Geolocator.distanceBetween(
-      position.latitude,
-      position.longitude,
-      widget.destino.latitude,
-      widget.destino.longitude,
-    );
-
-    setState(() {
-      _distanciaRestante = distanciaMetros;
-      
-      final velocidadKmh = position.speed * 3.6;
-      if (velocidadKmh > 1) {
-        final tiempoHoras = (distanciaMetros / 1000) / velocidadKmh;
-        final minutos = (tiempoHoras * 60).round();
-        _tiempoRestante = '${minutos} min';
-      } else {
-        _tiempoRestante = 'Calculando...';
-      }
-    });
-
-    // ✅ NUEVO: DETECTAR LLEGADA AL DESTINO (mostrar una sola vez)
-    if (distanciaMetros <= 50 && !_finalResumenMostrado) {
-      _finalResumenMostrado = true;
-      _otorgarPuntosRutaCompletada();
-      // Abrir resumen final con felicitación
-      _mostrarResumenFinal();
-    }
-  }
-
-  void _mostrarResumenFinal() {
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.45,
-          minChildSize: 0.3,
-          maxChildSize: 0.9,
-          builder: (_, controller) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              padding: const EdgeInsets.only(top: 8),
-              child: SingleChildScrollView(
-                controller: controller,
-                child: RoutePointsSummarySheet(
-                  events: _pointEvents,
-                  esFinal: true,
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _abrirHistoriaManual() {
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: false,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => RoutePointsSummarySheet(events: _pointEvents),
-    );
-  }
-
-  // ✅ NUEVO: Toggle entre 2D y 3D en navegación
-  void _onViewModeToggle(bool is3D) async {
-    setState(() {
-      _is3DMode = is3D;
-    });
-
-    // Guardar preferencia
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('map_3d_mode', is3D);
-
-    // Aplicar cambio inmediatamente si está siguiendo
-    if (_isFollowingUser && _mapController != null && _currentPosition != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-            zoom: 18.0,
-            bearing: _currentPosition!.heading,
-            tilt: is3D ? 60.0 : 0.0,
-          ),
-        ),
-      );
-    }
-  }
-
-  // ✅ NUEVO: Manejar botón centrar en navegación
-  void _onCenterLocation() {
-    // En navegación, simplemente toggle entre seguir/no seguir
-    setState(() {
-      _isFollowingUser = !_isFollowingUser;
-    });
-
-    if (_isFollowingUser && _currentPosition != null && _mapController != null) {
-      // Si activa seguimiento, centrar inmediatamente
-      _mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-            zoom: 18.0,
-            bearing: _currentPosition!.heading,
-            tilt: _is3DMode ? 60.0 : 0.0,
-          ),
-        ),
-      );
-    }
-  }
-
-  void _salirDeNavegacion() {
-    Navigator.pop(context);
-  }
-
-  // ✅ AGREGAR ESTE MÉTODO DESPUÉS DE _calcularDistanciaRestante:
-  Future<void> _otorgarPuntosInicioRuta() async {
-    if (_puntosInicioOtorgados) return;
-    try {
-      // ✅ Primero: si se saltó un día, resetear racha
-      await PointsService.verificarRachaYResetSiCorresponde();
-
-      // ✅ Luego: activar racha de hoy (una sola vez por día)
-      final rachaResult = await PointsService.activarRachaDiaria();
-      bool mostrarPuntosRacha = false;
-
-      if (rachaResult['status'] == 'success' && rachaResult['primera_vez_hoy'] == true) {
-        mostrarPuntosRacha = true;
-      } else if (rachaResult['ya_activada'] == true) {
-        mostrarPuntosRacha = false;
-      }
-      
-      // ✅ DAR PUNTOS POR INICIAR RUTA (siempre)
-      final result = await PointsService.darPuntosInicioRuta();
-      
-      if (result['status'] == 'success') {
-        // ✅ MOSTRAR ANIMACIÓN DE PUNTOS
-        setState(() {
-          final delta = result['puntos_cambio'] is int ? result['puntos_cambio'] as int : int.tryParse('${result['puntos_cambio']}') ?? 0;
-          _puntosAnimacion = delta;
-          _puntosPositivos = true;
-          _motivoPuntos = mostrarPuntosRacha ? 'Inicio + Racha' : 'Inicio';
-          _mostrandoAnimacionPuntos = true;
-          _puntosInicioOtorgados = true;
-          _pointEvents.add(RoutePointEvent(
-            puntos: delta,
-            motivo: _motivoPuntos ?? 'Inicio',
-            timestamp: DateTime.now(),
-          ));
-        });
-        
-        print('✅ Puntos otorgados: +${result['puntos_cambio']}');
-        
-        // ✅ SI ES PRIMERA RACHA DEL DÍA, MOSTRAR MENSAJE EXTRA
-        if (mostrarPuntosRacha) {
-          // Esperar un momento y mostrar mensaje de racha
-          Timer(const Duration(seconds: 3), () {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('🔥 ¡Primera ruta del día! Racha activada'),
-                  backgroundColor: Colors.orange,
-                  behavior: SnackBarBehavior.floating,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
-          });
-        }
-      }
-    } catch (e) {
-      print('❌ Error otorgando puntos de inicio: $e');
-    }
-  }
-
-  // ✅ AGREGAR ESTE MÉTODO PARA CUANDO COMPLETE LA RUTA:
-  Future<void> _otorgarPuntosRutaCompletada() async {
-    try {
-      final result = await PointsService.darPuntosRutaCompletada();
-      
-      if (result['status'] == 'success') {
-        setState(() {
-          final delta = result['puntos_cambio'] is int ? result['puntos_cambio'] as int : int.tryParse('${result['puntos_cambio']}') ?? 0;
-          _puntosAnimacion = delta;
-          _puntosPositivos = true;
-          _motivoPuntos = 'Completada';
-          _mostrandoAnimacionPuntos = true;
-          _pointEvents.add(RoutePointEvent(
-            puntos: delta,
-            motivo: 'Ruta completada',
-            timestamp: DateTime.now(),
-          ));
-        });
-        
-        print('✅ Puntos por completar ruta: +${result['puntos_cambio']}');
-      }
-    } catch (e) {
-      print('❌ Error otorgando puntos de completado: $e');
-    }
-  }
-
-  // ✅ CALLBACK CUANDO TERMINE LA ANIMACIÓN
-  void _onAnimacionPuntosComplete() {
-    setState(() {
-      _mostrandoAnimacionPuntos = false;
-    });
-  }
-
-  // ✅ Construir marcadores (flecha + destino)
+  // ✅ Construir marcadores (flecha en la ruta + destino)
   Set<Marker> _buildMarkers() {
     final set = <Marker>{};
 
@@ -533,15 +438,14 @@ class _NavigationScreenState extends State<NavigationScreen>
       ),
     );
 
-    // Flecha de navegación en la ubicación actual
-    if (_currentPosition != null && _navArrowIcon != null) {
-      final bearing = _currentPosition!.heading >= 0 ? _currentPosition!.heading : 0.0;
+    // Flecha de navegación pegada a la ruta (NO al GPS crudo)
+    if (_arrowPos != null && _navArrowIcon != null) {
       set.add(
         Marker(
           markerId: const MarkerId('nav_arrow'),
-          position: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+          position: _arrowPos!,
           icon: _navArrowIcon!,
-          rotation: bearing,
+          rotation: _arrowBearing,
           flat: true,
           anchor: const Offset(0.5, 0.5),
           zIndex: 9999,
@@ -557,36 +461,36 @@ class _NavigationScreenState extends State<NavigationScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // ✅ MAPA PRINCIPAL CON VISTA 3D/2D DINÁMICA
           GoogleMap(
             initialCameraPosition: CameraPosition(
-              target: _currentPosition != null 
-                  ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
-                  : widget.puntosRuta.first,
+              target: _arrowPos ?? (widget.puntosRuta.isNotEmpty ? widget.puntosRuta.first : widget.destino),
               zoom: 18.0,
-              bearing: _currentPosition?.heading ?? 0,
-              tilt: _is3DMode ? 60.0 : 0.0, // ✅ DINÁMICO según preferencia
+              bearing: _is3DMode ? _arrowBearing : 0.0,
+              tilt: _is3DMode ? 60.0 : 0.0,
             ),
             onMapCreated: (GoogleMapController controller) {
               _mapController = controller;
-              _mapController!.setMapStyle(null); // Estilo claro para navegación
+              _mapController!.setMapStyle(null);
             },
-            myLocationEnabled: false, // ⛔️ Ocultar punto azul durante navegación
+            myLocationEnabled: false, // ⛔️ Ocultar punto azul
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             compassEnabled: false,
             mapToolbarEnabled: false,
-            
-            // ✅ DETENER SEGUIMIENTO si el usuario mueve el mapa manualmente
+            onCameraMoveStarted: () {
+              // No hacer nada aquí; onCameraMove decide si fue gesto
+            },
             onCameraMove: (CameraPosition position) {
-              if (_isFollowingUser && _currentPosition != null) {
+              if (!_isFollowingUser || _arrowPos == null) return;
+
+              // Si el movimiento NO es programático y el usuario desplazó el mapa lejos, salir de seguimiento
+              if (!_isProgrammaticCameraMove) {
                 final distance = Geolocator.distanceBetween(
-                  _currentPosition!.latitude,
-                  _currentPosition!.longitude,
+                  _arrowPos!.latitude,
+                  _arrowPos!.longitude,
                   position.target.latitude,
                   position.target.longitude,
                 );
-                // Si se mueve más de 30 metros, detener seguimiento
                 if (distance > 30) {
                   setState(() {
                     _isFollowingUser = false;
@@ -594,17 +498,12 @@ class _NavigationScreenState extends State<NavigationScreen>
                 }
               }
             },
-            
-            // Ruta y marcador
-            polylines: {
-              Polyline(
-                polylineId: const PolylineId('ruta_navegacion'),
-                points: widget.puntosRuta,
-                color: const Color(0xFF1565C0),
-                width: 6,
-                patterns: [],
-              ),
+            onCameraIdle: () {
+              // Fin de animación programática
+              _isProgrammaticCameraMove = false;
             },
+            // ➕ Polyline restante (el tramo pasado desaparece)
+            polylines: _navPolylines,
             markers: _buildMarkers(),
           ),
 
@@ -954,6 +853,209 @@ class _NavigationScreenState extends State<NavigationScreen>
           ],
         ),
       ),
+    );
+  }
+
+  // ➕ Otorgar puntos al iniciar la ruta (una sola vez por sesión)
+  Future<void> _otorgarPuntosInicioRuta() async {
+    if (_puntosInicioOtorgados) return;
+    try {
+      await PointsService.darPuntosInicioRuta();
+      if (!mounted) return;
+      setState(() {
+        _puntosInicioOtorgados = true;
+        _mostrandoAnimacionPuntos = true;
+        _puntosAnimacion = 5;
+        _puntosPositivos = true;
+        _motivoPuntos = 'Ruta iniciada';
+        _pointEvents.add(RoutePointEvent(
+          puntos: 5,
+          motivo: 'Ruta iniciada',
+          timestamp: DateTime.now(),
+        ));
+      });
+
+      // Activar racha diaria (si corresponde)
+      await PointsService.activarRachaDiaria();
+    } catch (e) {
+      debugPrint('❌ Error otorgando puntos inicio: $e');
+    }
+  }
+
+  // ➕ Cálculo de distancia restante y tiempo estimado. Dispara llegada si aplica.
+  void _calcularDistanciaRestante(Position position) {
+    try {
+      final dist = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        widget.destino.latitude,
+        widget.destino.longitude,
+      );
+      String tiempo = 'Calculando...';
+      final v = position.speed; // m/s
+      if (v > 0.3) {
+        final segundos = (dist / v).round();
+        final m = (segundos / 60).floor();
+        final s = (segundos % 60).toString().padLeft(2, '0');
+        tiempo = m > 0 ? '${m}m ${s}s' : '${segundos}s';
+      }
+      setState(() {
+        _distanciaRestante = dist;
+        _tiempoRestante = tiempo;
+      });
+
+      // Llegada al destino
+      if (dist <= 50 && !_finalResumenMostrado) {
+        _onLlegadaADestino();
+      }
+    } catch (e) {
+      debugPrint('❌ Error calculando distancia restante: $e');
+    }
+  }
+
+  // ➕ Handler de llegada: otorgar puntos y mostrar resumen final una sola vez
+  Future<void> _onLlegadaADestino() async {
+    if (_finalResumenMostrado) return;
+    _finalResumenMostrado = true;
+    try {
+      await PointsService.darPuntosRutaCompletada();
+      if (!mounted) return;
+      setState(() {
+        _mostrandoAnimacionPuntos = true;
+        _puntosAnimacion = 15;
+        _puntosPositivos = true;
+        _motivoPuntos = 'Ruta completada';
+        _pointEvents.add(RoutePointEvent(
+          puntos: 15,
+          motivo: 'Ruta completada',
+          timestamp: DateTime.now(),
+        ));
+      });
+    } catch (e) {
+      debugPrint('❌ Error otorgando puntos de llegada: $e');
+    }
+
+    // Mostrar resumen final
+    _mostrarResumenFinal();
+
+    // detener navegación
+    _positionStream?.cancel();
+    _navegacionActiva = false;
+  }
+
+  // ➕ Abrir hoja con resumen final
+  void _mostrarResumenFinal() {
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.45,
+          minChildSize: 0.3,
+          maxChildSize: 0.85,
+          builder: (_, controller) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            padding: const EdgeInsets.all(12),
+            child: RoutePointsSummarySheet(
+              events: _pointEvents,
+              esFinal: true,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ➕ Salir de navegación limpiamente
+  void _salirDeNavegacion() {
+    _positionStream?.cancel();
+    _locationSubscription?.cancel();
+    _navegacionActiva = false;
+    _monitor.stopSession();
+    if (mounted) Navigator.of(context).maybePop();
+  }
+
+  // ➕ Toggle 2D/3D desde el widget de UI
+  void _onViewModeToggle(bool is3D) {
+    setState(() {
+      _is3DMode = is3D;
+    });
+
+    if (_isFollowingUser && _mapController != null) {
+      final target = _arrowPos ?? (widget.puntosRuta.isNotEmpty ? widget.puntosRuta.first : widget.destino);
+      _isProgrammaticCameraMove = true;
+      _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: target,
+            zoom: 18.0,
+            bearing: _is3DMode ? _arrowBearing : 0.0,
+            tilt: _is3DMode ? 60.0 : 0.0,
+          ),
+        ),
+      );
+    }
+  }
+
+  // ➕ Centrar la cámara en la flecha y retomar seguimiento
+  void _onCenterLocation() {
+    setState(() {
+      _isFollowingUser = true;
+    });
+    final target = _arrowPos ?? (widget.puntosRuta.isNotEmpty ? widget.puntosRuta.first : widget.destino);
+    if (_mapController != null) {
+      _isProgrammaticCameraMove = true;
+      _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: target,
+            zoom: 18.0,
+            bearing: _is3DMode ? _arrowBearing : 0.0,
+            tilt: _is3DMode ? 60.0 : 0.0,
+          ),
+        ),
+      );
+    }
+  }
+
+  // ➕ Callback al terminar animación de puntos
+  void _onAnimacionPuntosComplete() {
+    if (!mounted) return;
+    setState(() {
+      _mostrandoAnimacionPuntos = false;
+      _motivoPuntos = null;
+    });
+  }
+
+  // ➕ Abrir historial manual en hoja inferior
+  void _abrirHistoriaManual() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.45,
+          minChildSize: 0.3,
+          maxChildSize: 0.85,
+          builder: (_, controller) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            padding: const EdgeInsets.all(12),
+            child: RoutePointsSummarySheet(
+              events: _pointEvents,
+              esFinal: false,
+            ),
+          ),
+        );
+      },
     );
   }
 }

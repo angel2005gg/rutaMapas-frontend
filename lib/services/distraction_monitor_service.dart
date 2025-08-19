@@ -19,7 +19,10 @@ class DistractionSummary {
   final int appsAbiertas;
   final int llamadasContestadas;
   final int llamadasRechazadasONoContestadas;
-  final int deltaPuntos;
+  final int deltaPuntos; // total aplicado
+  final int deltaApps; // negativo o 0
+  final int deltaLlamadasContestadas; // negativo o 0
+  final int deltaLlamadasRechazadas; // positivo o 0
   final String motivo;
 
   const DistractionSummary({
@@ -27,6 +30,9 @@ class DistractionSummary {
     required this.llamadasContestadas,
     required this.llamadasRechazadasONoContestadas,
     required this.deltaPuntos,
+    required this.deltaApps,
+    required this.deltaLlamadasContestadas,
+    required this.deltaLlamadasRechazadas,
     required this.motivo,
   });
 
@@ -39,11 +45,10 @@ class DistractionMonitorService {
 
   bool _sessionActiva = false;
   DateTime? _bgStart; // se mantiene por compatibilidad, pero no penalizamos “otras apps”
-  int _deltaAcumuladoSesion = 0;
+  int _deltaAcumuladoSesion = 0; // acumulado total (para tope negativo de apps)
 
   // Llamadas
   StreamSubscription<dynamic>? _callStateSub;
-  CallState? _lastCallState;
   bool _hayLlamadaEntrante = false;
   bool _fueContestada = false;
   int _llamadasContestadasTotal = 0;
@@ -100,6 +105,9 @@ class DistractionMonitorService {
         llamadasContestadas: 0,
         llamadasRechazadasONoContestadas: 0,
         deltaPuntos: 0,
+        deltaApps: 0,
+        deltaLlamadasContestadas: 0,
+        deltaLlamadasRechazadas: 0,
         motivo: '',
       );
     }
@@ -140,18 +148,25 @@ class DistractionMonitorService {
             : appsAbiertas)
         : 0;
 
-    int delta = 0;
-    delta += nuevasContestadas * ScoringConfig.llamadaContestada;
-    delta += nuevasNoContestadas * ScoringConfig.llamadaRechazadaONoContestada;
-    delta += appsPenalizadas * ScoringConfig.puntosPorAppAjena;
+    // ➕ Calcular deltas por categoría
+    int appsDelta = appsPenalizadas * ScoringConfig.puntosPorAppAjena; // negativo o 0
 
-    // Tope acumulado por sesión (negativo)
-    final futuroAcumulado = _deltaAcumuladoSesion + delta;
-    if (futuroAcumulado < ScoringConfig.maxPenalizacionAppsSesion) {
-      final restante = ScoringConfig.maxPenalizacionAppsSesion - _deltaAcumuladoSesion;
-      delta = restante;
+    // Aplicar tope acumulado de penalización SOLO a apps
+    if (appsDelta < 0) {
+      final margenNegativo = ScoringConfig.maxPenalizacionAppsSesion - _deltaAcumuladoSesion; // valor negativo o 0
+      if (appsDelta < margenNegativo) {
+        appsDelta = margenNegativo; // recortar para no superar el tope negativo de sesión
+      }
     }
-    _deltaAcumuladoSesion += delta;
+
+    final int contestadasDelta = nuevasContestadas * ScoringConfig.llamadaContestada; // negativo
+    final int rechazadasDelta = nuevasNoContestadas * ScoringConfig.llamadaRechazadaONoContestada; // positivo
+
+    // Total aplicado esta vez
+    final int totalDelta = appsDelta + contestadasDelta + rechazadasDelta;
+
+    // Actualizar acumulado de sesión
+    _deltaAcumuladoSesion += totalDelta;
 
     final motivoParts = <String>[];
     if (appsPenalizadas > 0) motivoParts.add('${appsPenalizadas} app(s) abiertas');
@@ -162,7 +177,10 @@ class DistractionMonitorService {
       appsAbiertas: appsAbiertas,
       llamadasContestadas: nuevasContestadas,
       llamadasRechazadasONoContestadas: nuevasNoContestadas,
-      deltaPuntos: delta,
+      deltaPuntos: totalDelta,
+      deltaApps: appsDelta,
+      deltaLlamadasContestadas: contestadasDelta,
+      deltaLlamadasRechazadas: rechazadasDelta,
       motivo: motivoParts.isEmpty ? '' : motivoParts.join(' • '),
     );
   }
@@ -227,7 +245,6 @@ class DistractionMonitorService {
       _hayLlamadaEntrante = false;
       _fueContestada = false;
     }
-    _lastCallState = state;
   }
 
   void _reset() {
@@ -239,6 +256,5 @@ class DistractionMonitorService {
     _llamadasNoContestadasTotal = 0;
     _contestadasReportadas = 0;
     _noContestadasReportadas = 0;
-    _lastCallState = null;
   }
 }
