@@ -11,6 +11,9 @@
         tools:ignore="ProtectedPermissions" />
     <!-- (El permiso de uso requiere que el usuario lo habilite manualmente en Ajustes) -->
 
+    <!-- ✅ Permiso para notificaciones en Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" tools:targetApi="33" />
+
     <application
         android:label="ruta_map_frontend"
         android:name="${applicationName}"

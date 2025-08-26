@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'dart:async';
+import '../services/local_notifications_service.dart'; // ✅ IMPORTAR
+import 'tutorial/app_tutorial_flow.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -27,7 +29,23 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     _initializeAnimations();
+    // ✅ Inicializar notificaciones al arrancar (pedirá permiso en Android 13+)
+    _initNotifications();
     _checkAuthWithTimeout();
+  }
+
+  Future<void> _initNotifications() async {
+    try {
+      await LocalNotificationsService.instance.init();
+      // Forzar prompt y notificación de prueba una vez
+      await LocalNotificationsService.instance.ensureFirstPromptAndTest();
+      // Arrancar polling en background con primer chequeo inmediato
+      await LocalNotificationsService.instance.startPolling();
+    } catch (e) {
+      // Log silencioso; no bloquear el splash
+      // ignore: avoid_print
+      print('Notificaciones: init/startPolling error: $e');
+    }
   }
 
   @override
@@ -173,6 +191,29 @@ class _SplashScreenState extends State<SplashScreen>
       _statusMessage = 'Reintentando...';
     });
     _checkAuthWithTimeout();
+  }
+
+  // ✅ NUEVO: Mostrar tutorial si no se ha visto
+  Future<void> _maybeShowTutorial() async {
+    // Esperar a que termine cualquier inicialización ya existente
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+
+    final seen = await AppTutorialFlow.hasSeen();
+    if (!seen) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AppTutorialFlow(
+            onFinish: () {
+              // Al terminar, continuar flujo habitual
+              // No hacemos pop aquí porque AppTutorialFlow ya hace maybePop
+            },
+          ),
+          fullscreenDialog: true,
+        ),
+      );
+    }
   }
 
   @override
