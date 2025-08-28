@@ -2,23 +2,30 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
+import 'comunidad_service.dart'; // ✅ para actualizar puntos en comunidad
 
 class PointsService {
   static const _storage = FlutterSecureStorage();
 
   // ✅ SUMAR PUNTOS al iniciar ruta
   static Future<Map<String, dynamic>> darPuntosInicioRuta() async {
-    return await _actualizarPuntos(5, 'Ruta iniciada');
+    final res = await _actualizarPuntos(5, 'Ruta iniciada');
+    await _actualizarPuntosCompetencia(5, 'Ruta iniciada');
+    return res;
   }
 
   // ✅ SUMAR PUNTOS al completar ruta
   static Future<Map<String, dynamic>> darPuntosRutaCompletada() async {
-    return await _actualizarPuntos(15, 'Ruta completada');
+    final res = await _actualizarPuntos(15, 'Ruta completada');
+    await _actualizarPuntosCompetencia(15, 'Ruta completada');
+    return res;
   }
 
   // ✅ RESTAR PUNTOS por salir de la app (para futuro)
   static Future<Map<String, dynamic>> restarPuntosSalidaApp() async {
-    return await _actualizarPuntos(-10, 'Salió de la aplicación durante navegación');
+    final res = await _actualizarPuntos(-10, 'Salió de la aplicación durante navegación');
+    await _actualizarPuntosCompetencia(-10, 'Distracción: salió de la app');
+    return res;
   }
 
   // ✅ NUEVO: Ajuste de puntos por distracciones (apps/llamadas)
@@ -26,10 +33,37 @@ class PointsService {
     int puntos,
     String motivo,
   ) async {
-    return await _actualizarPuntos(puntos, motivo);
+    final res = await _actualizarPuntos(puntos, motivo);
+    await _actualizarPuntosCompetencia(puntos, motivo);
+    return res;
   }
 
-  // ✅ MÉTODO PRIVADO para comunicarse con el backend
+  // ✅ Enviar puntos a la competencia de la comunidad actual (si existe)
+  static Future<void> _actualizarPuntosCompetencia(int puntos, String motivo) async {
+    try {
+      final comunidadIdStr = await _storage.read(key: 'comunidad_actual_id');
+      if (comunidadIdStr == null) {
+        // No hay comunidad seleccionada, no aplicar en competencia
+        return;
+      }
+      final comunidadId = int.tryParse(comunidadIdStr);
+      if (comunidadId == null) return;
+
+      // Opcional: si quisieras respetar una duración elegida por el admin, podrías
+      // leerla de storage también. Por ahora dejamos que el backend maneje default 7 o lo configurado.
+      final svc = ComunidadService();
+      final resp = await svc.actualizarPuntosComunidad(
+        comunidadId: comunidadId,
+        puntos: puntos,
+        motivo: motivo,
+      );
+      print('🏆 Competencia puntos resp: ${resp['status']} - ${resp['message'] ?? ''}');
+    } catch (e) {
+      print('⚠️ No se pudo actualizar puntos de competencia: $e');
+    }
+  }
+
+  // ✅ MÉTODO PRIVADO para comunicarse con el backend (puntaje global)
   static Future<Map<String, dynamic>> _actualizarPuntos(int puntos, String motivo) async {
     try {
       final token = await _storage.read(key: 'token');
@@ -56,8 +90,8 @@ class PointsService {
         return {
           'status': 'success',
           'puntos_cambio': puntos,
-          'puntaje_actual': data['data']['puntaje_actual'],
-          'clasificacion': data['data']['clasificacion'],
+          'puntaje_actual': data['data']?['puntaje_actual'],
+          'clasificacion': data['data']?['clasificacion'],
         };
       } else {
         return {'status': 'error', 'message': 'Error del servidor'};

@@ -6,6 +6,8 @@ import 'screens/dashboard_screen.dart';
 import 'screens/comunidades/comunidades_screen.dart';
 import 'screens/comunidades/crear_comunidad_screen.dart';
 import 'screens/comunidades/unirse_comunidad_screen.dart';
+import 'screens/comunidades/ajustes_competencia_screen.dart';
+import 'screens/comunidades/historial_competencias_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -33,6 +35,27 @@ class MyApp extends StatelessWidget {
         '/comunidades': (context) => const ComunidadesScreen(),
         '/crear-comunidad': (context) => const CrearComunidadScreen(),
         '/unirse-comunidad': (context) => const UnirseComunidadScreen(),
+      },
+      // ✅ onGenerateRoute para pasar argumentos a nuevas pantallas
+      onGenerateRoute: (settings) {
+        if (settings.name == '/ajustes-competencia') {
+          final args = settings.arguments as Map<String, dynamic>?;
+          return MaterialPageRoute(
+            builder: (_) => AjustesCompetenciaScreen(
+              comunidadId: args?['comunidadId'] as int,
+              duracionInicial: (args?['duracionInicial'] as int?) ?? 7,
+            ),
+          );
+        }
+        if (settings.name == '/historial-competencias') {
+          final args = settings.arguments as Map<String, dynamic>?;
+          return MaterialPageRoute(
+            builder: (_) => HistorialCompetenciasScreen(
+              comunidadId: args?['comunidadId'] as int,
+            ),
+          );
+        }
+        return null;
       },
     );
   }

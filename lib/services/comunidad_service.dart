@@ -230,4 +230,172 @@ class ComunidadService {
       };
     }
   }
+
+  // ✅ NUEVO: Configurar periodo de competencia (solo creador)
+  Future<Map<String, dynamic>> configurarPeriodo({
+    required int comunidadId,
+    required int duracionDias,
+  }) async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        return {'status': 'error', 'message': 'No hay sesión activa'};
+      }
+
+      final uri = Uri.parse('${ApiConfig.comunidadesUrl}/$comunidadId/configurar-periodo');
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'duracion_dias': duracionDias}),
+      );
+
+      final data = json.decode(resp.body);
+      return {
+        'status': resp.statusCode == 200 ? 'success' : 'error',
+        ...data,
+      };
+    } catch (e) {
+      return {'status': 'error', 'message': 'Error de conexión: ${e.toString()}'};
+    }
+  }
+
+  // ✅ NUEVO: Sumar/restar puntos en contexto de comunidad
+  Future<Map<String, dynamic>> actualizarPuntosComunidad({
+    required int comunidadId,
+    required int puntos,
+    int? duracionDias,
+    String? motivo,
+  }) async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        return {'status': 'error', 'message': 'No hay sesión activa'};
+      }
+
+      final uri = Uri.parse('${ApiConfig.comunidadesUrl}/$comunidadId/puntos');
+      final body = <String, dynamic>{
+        'puntos': puntos,
+        if (duracionDias != null) 'duracion_dias': duracionDias,
+        if (motivo != null && motivo.isNotEmpty) 'motivo': motivo,
+      };
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(body),
+      );
+
+      final data = json.decode(resp.body);
+      return {
+        'status': resp.statusCode == 200 ? 'success' : 'error',
+        ...data,
+      };
+    } catch (e) {
+      return {'status': 'error', 'message': 'Error de conexión: ${e.toString()}'};
+    }
+  }
+
+  // ✅ NUEVO: Ranking actual de la comunidad
+  Future<Map<String, dynamic>> getRankingActual({
+    required int comunidadId,
+    int duracionDias = 7,
+  }) async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        return {'status': 'error', 'message': 'No hay sesión activa'};
+      }
+
+      final uri = Uri.parse(
+        '${ApiConfig.comunidadesUrl}/$comunidadId/ranking-actual?duracion_dias=$duracionDias',
+      );
+
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final data = json.decode(resp.body);
+      return {
+        'status': resp.statusCode == 200 ? 'success' : 'error',
+        ...data,
+      };
+    } catch (e) {
+      return {'status': 'error', 'message': 'Error de conexión: ${e.toString()}'};
+    }
+  }
+
+  // ✅ NUEVO: Historial de competencias (cerradas)
+  Future<Map<String, dynamic>> getHistorialCompetencias({
+    required int comunidadId,
+    int page = 1,
+    int perPage = 10,
+  }) async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        return {'status': 'error', 'message': 'No hay sesión activa'};
+      }
+
+      final uri = Uri.parse(
+        '${ApiConfig.comunidadesUrl}/$comunidadId/historial?page=$page&per_page=$perPage',
+      );
+
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final data = json.decode(resp.body);
+      return {
+        'status': resp.statusCode == 200 ? 'success' : 'error',
+        ...data,
+      };
+    } catch (e) {
+      return {'status': 'error', 'message': 'Error de conexión: ${e.toString()}'};
+    }
+  }
+
+  // ✅ NUEVO: Editar competencia activa (cambiar duración y recalcular fecha fin)
+  Future<Map<String, dynamic>> editarCompetenciaActiva({
+    required int comunidadId,
+    required int duracionDias,
+  }) async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        return {'status': 'error', 'message': 'No hay sesión activa'};
+      }
+
+      final uri = Uri.parse('${ApiConfig.comunidadesUrl}/$comunidadId/competencia/editar');
+      final resp = await http.patch(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'duracion_dias': duracionDias}),
+      );
+
+      final data = json.decode(resp.body);
+      return {
+        'status': resp.statusCode == 200 ? 'success' : 'error',
+        ...data,
+      };
+    } catch (e) {
+      return {'status': 'error', 'message': 'Error de conexión: ${e.toString()}'};
+    }
+  }
 }

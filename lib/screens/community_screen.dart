@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // ✅ NUEVO: Para copiar al portapapeles
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // ✅ NUEVO: Persistir comunidad actual
 import '../services/comunidad_service.dart';
 import '../widgets/community_drawer.dart';
 import '../widgets/community_management_sheet.dart';
 import '../widgets/ranking_position_widget.dart'; // ✅ NUEVO IMPORT
+
+// ✅ MOVIDO: Enum a nivel superior
+enum RankingView { competencia, total }
 
 class CommunityScreen extends StatefulWidget {
   const CommunityScreen({Key? key}) : super(key: key);
@@ -15,6 +19,7 @@ class CommunityScreen extends StatefulWidget {
 class _CommunityScreenState extends State<CommunityScreen> {
   final ComunidadService _comunidadService = ComunidadService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage(); // ✅
   
   bool _isLoading = true;
   List<Map<String, dynamic>> _misComunidades = [];
@@ -23,12 +28,29 @@ class _CommunityScreenState extends State<CommunityScreen> {
   // ✅ NUEVO: Estado para controlar el desplegable
   bool _isExpanded = false;
 
-  void _cambiarComunidad(Map<String, dynamic> comunidad) {
+  // ✅ NUEVO: Estado de ranking de competencia vs total
+  List<Map<String, dynamic>> _rankingCompetencia = [];
+  List<Map<String, dynamic>> _rankingTotal = [];
+  int _rankingDuracionDias = 7; // por defecto
+  bool _isLoadingRanking = false;
+
+  // Selector de vista (enum definido a nivel superior)
+  RankingView _selectedRanking = RankingView.competencia;
+
+  void _cambiarComunidad(Map<String, dynamic> comunidad) async {
     setState(() {
       _comunidadActual = comunidad;
-      _isExpanded = false; // ✅ Cerrar desplegable al cambiar comunidad
+      _isExpanded = false;
+      _rankingCompetencia = [];
+      _rankingTotal = List<Map<String, dynamic>>.from(comunidad['usuarios'] ?? []);
     });
+    // ✅ Persistir selección
+    final id = comunidad['id'];
+    if (id != null) {
+      await _storage.write(key: 'comunidad_actual_id', value: '$id');
+    }
     Navigator.pop(context);
+    _cargarRankingCompetencia();
   }
 
   @override
@@ -61,6 +83,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
             
             if (comunidades.isEmpty) {
               _comunidadActual = null;
+              _rankingTotal = [];
             } else {
               Map<String, dynamic>? comunidadCreador;
               Map<String, dynamic>? otraComunidad;
@@ -75,13 +98,30 @@ class _CommunityScreenState extends State<CommunityScreen> {
               }
               
               _comunidadActual = comunidadCreador ?? otraComunidad;
+              _rankingTotal = List<Map<String, dynamic>>.from(_comunidadActual?['usuarios'] ?? []);
             }
           });
+
+          // ✅ Persistir o limpiar selección
+          final idSel = _comunidadActual?['id'];
+          if (idSel != null) {
+            await _storage.write(key: 'comunidad_actual_id', value: '$idSel');
+          } else {
+            await _storage.delete(key: 'comunidad_actual_id');
+          }
+
+          // ✅ Una vez elegida la comunidad actual, cargar ranking
+          if (_comunidadActual != null) {
+            await _cargarRankingCompetencia();
+          }
         } else {
           setState(() {
             _misComunidades = [];
             _comunidadActual = null;
+            _rankingCompetencia = [];
           });
+          // ✅ limpiar selección si no hay comunidades
+          await _storage.delete(key: 'comunidad_actual_id');
         }
       }
     } catch (e) {
@@ -89,7 +129,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
         setState(() {
           _misComunidades = [];
           _comunidadActual = null;
+          _rankingCompetencia = [];
         });
+        await _storage.delete(key: 'comunidad_actual_id');
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -105,54 +147,73 @@ class _CommunityScreenState extends State<CommunityScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  void _abrirGestionComunidades() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => CommunityManagementSheet(
-        misComunidades: _misComunidades,
-        comunidadActual: _comunidadActual!,
-        onComunidadUpdated: _cargarMisComunidades,
-      ),
-    );
+  // ✅ NUEVO: carga de ranking de competencia activa (sin sobrescribir comunidad)
+  Future<void> _cargarRankingCompetencia() async {
+    if (_comunidadActual == null) return;
+    setState(() => _isLoadingRanking = true);
+    try {
+      final id = _comunidadActual!['id'] is int
+          ? _comunidadActual!['id']
+          : int.tryParse('${_comunidadActual!['id']}');
+      if (id == null) return;
+
+      final res = await _comunidadService.getRankingActual(
+        comunidadId: id,
+        duracionDias: _rankingDuracionDias,
+      );
+
+      if (!mounted) return;
+
+      if (res['status'] == 'success') {
+        final List data = (res['data'] ?? []) as List;
+        final ranking = data.map<Map<String, dynamic>>((e) => {
+              'usuario_id': e['usuario_id'],
+              'nombre': e['nombre'],
+              'puntaje': e['puntos'],
+              'posicion': e['posicion'],
+              'racha_actual': e['racha_actual'],
+            }).toList();
+
+        setState(() {
+          _rankingCompetencia = ranking;
+        });
+      } else {
+        // mensaje informativo
+        final msg = (res['message'] ?? 'No se pudo cargar el ranking').toString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al cargar ranking: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoadingRanking = false);
+    }
   }
 
-  // ✅ NUEVO: Método para copiar código al portapapeles
-  void _copiarCodigo() {
-    final codigo = _comunidadActual!['codigo_unico'];
-    Clipboard.setData(ClipboardData(text: codigo));
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Código copiado al portapapeles'),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  // ✅ NUEVO: Método para obtener mi posición en el ranking (robusto)
-  Map<String, dynamic> _obtenerMiPosicion() {
+  // ✅ Actualizar para recibir la lista a evaluar
+  Map<String, dynamic> _obtenerMiPosicion(List<Map<String, dynamic>> usuarios) {
     if (_comunidadActual == null) {
       return {'posicion': null, 'puntos': 0};
     }
-
-    final usuariosRaw = _comunidadActual!['usuarios'];
-    if (usuariosRaw == null || usuariosRaw is! List) {
-      return {'posicion': null, 'puntos': 0};
-    }
-
-    final usuarios = List<Map<String, dynamic>>.from(usuariosRaw);
+    if (usuarios.isEmpty) return {'posicion': null, 'puntos': 0};
 
     // 1) Intentar encontrar al usuario actual por la marca del backend
-    Map<String, dynamic>? yo = usuarios.firstWhere(
+    Map<String, dynamic> yo = usuarios.firstWhere(
       (u) => u['es_usuario_actual'] == true || u['es_actual'] == true,
       orElse: () => {},
     );
 
-    if (yo != null && yo.isNotEmpty) {
+    if (yo.isNotEmpty) {
       // Si ya viene la posición desde el backend, úsala
       final pos = (yo['posicion'] is int) ? yo['posicion'] as int : null;
       final pts = (yo['puntaje'] ?? 0) is int ? yo['puntaje'] as int : 0;
@@ -277,6 +338,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
               const SizedBox(height: 16),
               
+
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -344,9 +406,11 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   Widget _buildDashboardComunidad() {
-    final rankingMiembros = List<Map<String, dynamic>>.from(_comunidadActual!['usuarios'] ?? []);
-    final miRanking = _obtenerMiPosicion(); // ✅ OBTENER MI POSICIÓN
-    
+    final rankingMiembros = _selectedRanking == RankingView.competencia
+        ? _rankingCompetencia
+        : _rankingTotal;
+    final miRanking = _obtenerMiPosicion(rankingMiembros);
+
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: Colors.grey[50],
@@ -398,7 +462,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
       // ✅ BODY SIN STACK - NORMAL
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _cargarMisComunidades,
+          onRefresh: () async {
+            await _cargarMisComunidades();
+            await _cargarRankingCompetencia();
+          },
           color: const Color(0xFF1565C0),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -614,10 +681,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Ranking de Miembros',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1565C0),
@@ -641,10 +708,69 @@ class _CommunityScreenState extends State<CommunityScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+
+                // ✅ NUEVO: Botones de cambio de vista (horizontal, responsive)
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => setState(() => _selectedRanking = RankingView.competencia),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: _selectedRanking == RankingView.competencia
+                              ? const Color(0xFF1565C0)
+                              : Colors.white,
+                          foregroundColor: _selectedRanking == RankingView.competencia
+                              ? Colors.white
+                              : const Color(0xFF1565C0),
+                          side: BorderSide(
+                            color: _selectedRanking == RankingView.competencia
+                                ? const Color(0xFF1565C0)
+                                : Colors.grey[400]!,
+                          ),
+                        ),
+                        child: const Text('Competencia'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => setState(() => _selectedRanking = RankingView.total),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: _selectedRanking == RankingView.total
+                              ? const Color(0xFF1565C0)
+                              : Colors.white,
+                          foregroundColor: _selectedRanking == RankingView.total
+                              ? Colors.white
+                              : const Color(0xFF1565C0),
+                          side: BorderSide(
+                            color: _selectedRanking == RankingView.total
+                                ? const Color(0xFF1565C0)
+                                : Colors.grey[400]!,
+                          ),
+                        ),
+                        child: const Text('Total'),
+                      ),
+                    ),
+                  ],
+                ),
+
                 const SizedBox(height: 16),
-                
-                // Ranking completo
-                if (rankingMiembros.isNotEmpty)
+
+                // Loader cuando se selecciona competencia y aún no cargó
+                if (_selectedRanking == RankingView.competencia && _isLoadingRanking && _rankingCompetencia.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: const Center(
+                      child: CircularProgressIndicator(color: Color(0xFF1565C0)),
+                    ),
+                  )
+                else if (rankingMiembros.isNotEmpty)
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -673,7 +799,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Aún no hay actividad en el ranking',
+                            _selectedRanking == RankingView.competencia
+                                ? 'Aún no hay actividad en la competencia'
+                                : 'Aún no hay miembros con puntaje',
                             style: TextStyle(
                               fontSize: 16,
                               color: Colors.grey[600],
@@ -684,8 +812,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
                       ),
                     ),
                   ),
-                
-                const SizedBox(height: 100), // ✅ ESPACIO PARA EL WIDGET FLOTANTE
+
+                const SizedBox(height: 100),
               ],
             ),
           ),
@@ -746,7 +874,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
     );
   }
 
-  // ✅ Widget para cada item del ranking (IGUAL que antes)
+  // ✅ Widget para cada item del ranking (usa puntos de competencia: 'puntaje')
   Widget _buildRankingItem(Map<String, dynamic> miembro, bool isTopThree) {
     String getAvatar(String? nombre) {
       if (nombre == null || nombre.isEmpty) return 'U';
@@ -852,28 +980,29 @@ class _CommunityScreenState extends State<CommunityScreen> {
                   runSpacing: 4,
                   children: [
                     Text(
-                      '${miembro['puntaje'] ?? 0} pts',
+                      '${miembro['puntaje'] ?? 0} pts', // puntos de competencia
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey[600],
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.orange[100],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Racha: ${miembro['racha_actual'] ?? 0}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange[700],
-                          fontWeight: FontWeight.w600,
+                    if (miembro['racha_actual'] != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[100],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Racha: ${miembro['racha_actual']}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange[700],
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ],
@@ -934,13 +1063,43 @@ class _CommunityScreenState extends State<CommunityScreen> {
       );
     }
 
-    // ✅ LÓGICA PRINCIPAL: 
-    // - Si NO tiene comunidades → Mostrar pantalla de crear/unirse
-    // - Si SÍ tiene comunidades → Mostrar dashboard de su comunidad principal
+    // ✅ LÓGICA PRINCIPAL
     if (_comunidadActual == null) {
-      return _buildSinComunidades(); // Solo cuando NO tiene comunidades
+      return _buildSinComunidades();
     } else {
-      return _buildDashboardComunidad(); // Dashboard principal de su comunidad
+      return _buildDashboardComunidad();
     }
+  }
+
+  // ✅ NUEVOS MÉTODOS: abrir gestión y copiar código
+  void _abrirGestionComunidades() {
+    if (_comunidadActual == null) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return CommunityManagementSheet(
+          misComunidades: _misComunidades,
+          comunidadActual: _comunidadActual!,
+          onComunidadUpdated: () {
+            Navigator.of(ctx).pop();
+            _cargarMisComunidades();
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _copiarCodigo() async {
+    final code = _comunidadActual?['codigo_unico']?.toString();
+    if (code == null || code.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Código copiado')),
+    );
   }
 }

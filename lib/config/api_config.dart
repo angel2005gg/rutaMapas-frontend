@@ -4,7 +4,7 @@ class ApiConfig {
   // static const String baseUrl = 'http://api.kamati.co/api';
   
   // Desarrollo (dejar como referencia)
-  static const String baseUrl = 'http://192.168.0.134:8000/api';
+  static const String baseUrl = 'http://192.168.0.125:8000/api';
   
   // ✅ URLs específicas (opcional - para mejor organización)
   static const String authUrl = '$baseUrl/auth';

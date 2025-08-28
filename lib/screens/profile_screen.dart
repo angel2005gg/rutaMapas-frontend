@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
+import '../services/comunidad_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -32,21 +33,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final userData = await _authService.getCurrentUser();
       
       if (userData != null) {
-        // ✅ AGREGAR DEBUG ESPECÍFICO PARA VER QUÉ LLEGA
         print('📊 Datos completos recibidos en perfil: $userData');
+        var user = UserModel.fromJson(userData);
         
-        final user = UserModel.fromJson(userData);
-        
-        // ✅ DEBUG ESPECÍFICO PARA LA RACHA
         print('👤 Usuario procesado en perfil:');
         print('   - Nombre: ${user.nombre}');
         print('   - Racha Actual: ${user.rachaActual}');
         print('   - Clasificación ID: ${user.clasificacionId}');
         print('   - Clasificación Nombre: ${_getNombreClasificacion(user.clasificacionId)}');
-        
-        // ✅ VERIFICAR DATOS RAW TAMBIÉN
         final rawUserData = userData['user'] ?? userData;
         print('🔍 Datos RAW de racha: ${rawUserData['racha_actual']}');
+        print('🔍 Puntos totales (user endpoint): ${user.puntosTotales}');
+
+        // Fallback: si no tenemos puntos totales (>0), intentar leerlos desde mis comunidades
+        int puntosTotales = user.puntosTotales;
+        if (puntosTotales <= 0) {
+          try {
+            final comuSvc = ComunidadService();
+            final res = await comuSvc.obtenerMisComunidades();
+            if (res['status'] == 'success' && res['comunidades'] is List) {
+              final List comunidades = res['comunidades'];
+              int maxPuntaje = 0;
+              for (final c in comunidades) {
+                final usuarios = c['usuarios'];
+                if (usuarios is List) {
+                  for (final u in usuarios) {
+                    if ((u['id'] == user.id) && u['puntaje'] != null) {
+                      final p = u['puntaje'] is int ? u['puntaje'] as int : int.tryParse('${u['puntaje']}') ?? 0;
+                      if (p > maxPuntaje) maxPuntaje = p;
+                    }
+                  }
+                }
+              }
+              if (maxPuntaje > 0) {
+                puntosTotales = maxPuntaje;
+                // reconstruir user con puntosTotales
+                user = UserModel(
+                  id: user.id,
+                  nombre: user.nombre,
+                  correo: user.correo,
+                  fotoPerfil: user.fotoPerfil,
+                  googleUid: user.googleUid,
+                  rachaActual: user.rachaActual,
+                  clasificacionId: user.clasificacionId,
+                  puntosTotales: puntosTotales,
+                );
+                print('✅ Puntos totales tomados de comunidades: $puntosTotales');
+              }
+            }
+          } catch (e) {
+            print('⚠️ No se pudo obtener puntos desde comunidades: $e');
+          }
+        }
         
         setState(() {
           _user = user;
@@ -336,6 +374,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Icons.emoji_events,
                               Colors.amber,
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            _buildStatItem(
+                              'Puntos totales',
+                              '${_user!.puntosTotales}',
+                              Icons.score_rounded,
+                              const Color(0xFF1565C0),
+                            ),
+                            const SizedBox(width: 16),
+                            const Expanded(child: SizedBox()), // mantener estructura a 2 columnas aunque 1 dato
                           ],
                         ),
                       ],

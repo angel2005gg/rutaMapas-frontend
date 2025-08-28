@@ -77,6 +77,48 @@ class CommunityManagementSheet extends StatelessWidget {
               });
             },
           ),
+
+          // ✅ NUEVO: Ajustes de competencia (solo creador)
+          if (comunidadActual['es_creador'] == true)
+            _buildMenuItem(
+              context,
+              icon: Icons.tune,
+              iconColor: Colors.indigo,
+              backgroundColor: Colors.indigo.withOpacity(0.1),
+              title: 'Ajustes de competencia',
+              subtitle: 'Configurar periodo activo',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(
+                  context,
+                  '/ajustes-competencia',
+                  arguments: {
+                    'comunidadId': comunidadActual['id'] as int,
+                    'duracionInicial': (comunidadActual['duracion_dias'] as int?) ?? 7,
+                  },
+                ).then((saved) {
+                  if (saved == true) onComunidadUpdated();
+                });
+              },
+            ),
+
+          // ✅ NUEVO: Historial de competencias
+          _buildMenuItem(
+            context,
+            icon: Icons.history,
+            iconColor: Colors.brown,
+            backgroundColor: Colors.brown.withOpacity(0.1),
+            title: 'Historial de competencias',
+            subtitle: 'Ver ganadores anteriores',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(
+                context,
+                '/historial-competencias',
+                arguments: {'comunidadId': comunidadActual['id'] as int},
+              );
+            },
+          ),
           
           const SizedBox(height: 16),
           
@@ -107,7 +149,7 @@ class CommunityManagementSheet extends StatelessWidget {
                 _salirDeComunidad(context);
               },
             ),
-        
+      
           const SizedBox(height: 10),
         ],
       ),

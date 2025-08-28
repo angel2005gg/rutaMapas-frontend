@@ -6,6 +6,7 @@ class UserModel {
   final String? googleUid; // ➕ NUEVO: Agregar google_uid nullable
   final int rachaActual;
   final int clasificacionId;
+  final int puntosTotales; // ➕ NUEVO: puntos totales del usuario
 
   UserModel({
     required this.id,
@@ -15,6 +16,7 @@ class UserModel {
     this.googleUid,  // ➕ NUEVO: Puede ser null
     required this.rachaActual,
     required this.clasificacionId,
+    this.puntosTotales = 0, // ➕ por defecto 0
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,10 @@ class UserModel {
     
     final rachaActual = userData['racha_actual'] ?? 0;
     print('   - racha_actual procesada: $rachaActual');
+
+    // ➕ Intentar leer puntos totales de varias posibles llaves
+    final dynamic puntosRaw = userData['puntaje_actual'] ?? userData['puntos_totales'] ?? userData['puntaje'] ?? userData['puntos'];
+    final int puntosTotales = puntosRaw is int ? puntosRaw : int.tryParse('${puntosRaw ?? 0}') ?? 0;
     
     return UserModel(
       id: userData['id'],
@@ -38,6 +44,7 @@ class UserModel {
       googleUid: userData['google_uid'],
       rachaActual: rachaActual, // ✅ Usar variable procesada
       clasificacionId: userData['clasificacion_id'] ?? 0,
+      puntosTotales: puntosTotales, // ➕ NUEVO
     );
   }
 
@@ -50,6 +57,7 @@ class UserModel {
       'google_uid': googleUid, // ➕ NUEVO
       'racha_actual': rachaActual,
       'clasificacion_id': clasificacionId,
+      'puntaje_actual': puntosTotales, // ➕ mantener compatibilidad
     };
   }
 
