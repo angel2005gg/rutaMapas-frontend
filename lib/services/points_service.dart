@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
-import 'comunidad_service.dart'; // ✅ para actualizar puntos en comunidad
+import 'comunidad_service.dart'; // ✅ para actualizar puntos en comunidad (fallback)
 
 class PointsService {
   static const _storage = FlutterSecureStorage();
@@ -10,21 +10,22 @@ class PointsService {
   // ✅ SUMAR PUNTOS al iniciar ruta
   static Future<Map<String, dynamic>> darPuntosInicioRuta() async {
     final res = await _actualizarPuntos(5, 'Ruta iniciada');
-    await _actualizarPuntosCompetencia(5, 'Ruta iniciada');
+    // Enviar a TODAS las comunidades con competencia activa (sin duplicar)
+    await _aplicarPuntosTodasComunidades(5, 'Ruta iniciada');
     return res;
   }
 
   // ✅ SUMAR PUNTOS al completar ruta
   static Future<Map<String, dynamic>> darPuntosRutaCompletada() async {
     final res = await _actualizarPuntos(15, 'Ruta completada');
-    await _actualizarPuntosCompetencia(15, 'Ruta completada');
+    await _aplicarPuntosTodasComunidades(15, 'Ruta completada');
     return res;
   }
 
   // ✅ RESTAR PUNTOS por salir de la app (para futuro)
   static Future<Map<String, dynamic>> restarPuntosSalidaApp() async {
     final res = await _actualizarPuntos(-10, 'Salió de la aplicación durante navegación');
-    await _actualizarPuntosCompetencia(-10, 'Distracción: salió de la app');
+    await _aplicarPuntosTodasComunidades(-10, 'Distracción: salió de la app');
     return res;
   }
 
@@ -34,8 +35,58 @@ class PointsService {
     String motivo,
   ) async {
     final res = await _actualizarPuntos(puntos, motivo);
-    await _actualizarPuntosCompetencia(puntos, motivo);
+    await _aplicarPuntosTodasComunidades(puntos, motivo);
     return res;
+  }
+
+  // ✅ Enviar puntos a TODAS las comunidades del usuario con competencia activa
+  // Usa POST /puntaje/aplicar-todas. Si falla o no existe, hace fallback a la lógica previa
+  // de una sola comunidad seleccionada para no romper el flujo.
+  static Future<void> _aplicarPuntosTodasComunidades(
+    int puntos,
+    String motivo, {
+    bool soloSiActiva = true,
+    int? duracionDias,
+  }) async {
+    try {
+      final token = await _storage.read(key: 'token');
+      if (token == null) return; // sin sesión, omitir
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/puntaje/aplicar-todas');
+      final body = <String, dynamic>{
+        'puntos': puntos,
+        if (motivo.isNotEmpty) 'motivo': motivo,
+        'solo_si_activa': soloSiActiva,
+        if (duracionDias != null) 'duracion_dias': duracionDias,
+      };
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(body),
+      );
+
+      // 200 => aplicado; cualquier otro => fallback opcional
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body);
+        final applied = data['data']?['comunidades_aplicadas'];
+        final omitted = data['data']?['comunidades_omitidas'];
+        print('🏆 aplicar-todas OK: aplicadas=${applied ?? []}, omitidas=${omitted ?? []}');
+        return;
+      } else {
+        print('⚠️ aplicar-todas falló: ${resp.statusCode} - ${resp.body}');
+        // Fallback: mantener comportamiento previo para NO dejar de acreditar al menos
+        await _actualizarPuntosCompetencia(puntos, motivo);
+      }
+    } catch (e) {
+      print('⚠️ aplicar-todas exception: $e');
+      // Fallback: mantener comportamiento previo si hay error de red o parsing
+      await _actualizarPuntosCompetencia(puntos, motivo);
+    }
   }
 
   // ✅ Enviar puntos a la competencia de la comunidad actual (si existe)
@@ -49,8 +100,6 @@ class PointsService {
       final comunidadId = int.tryParse(comunidadIdStr);
       if (comunidadId == null) return;
 
-      // Opcional: si quisieras respetar una duración elegida por el admin, podrías
-      // leerla de storage también. Por ahora dejamos que el backend maneje default 7 o lo configurado.
       final svc = ComunidadService();
       final resp = await svc.actualizarPuntosComunidad(
         comunidadId: comunidadId,
