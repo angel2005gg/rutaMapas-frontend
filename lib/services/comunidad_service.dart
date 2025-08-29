@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../config/api_config.dart'; // ✅ IMPORTAR CONFIGURACIÓN
 
 class ComunidadService {
@@ -397,5 +398,49 @@ class ComunidadService {
     } catch (e) {
       return {'status': 'error', 'message': 'Error de conexión: ${e.toString()}'};
     }
+  }
+
+  // ✅ NUEVO: Cerrar competencia actual (solo creador)
+  Future<Map<String, dynamic>> cerrarCompetencia({
+    required int comunidadId,
+    int? forzarGanadorId,
+  }) async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        return {'status': 'error', 'message': 'No hay sesión activa'};
+      }
+
+      final uri = Uri.parse('${ApiConfig.comunidadesUrl}/$comunidadId/competencia/cerrar');
+      final body = <String, dynamic>{
+        if (forzarGanadorId != null) 'forzar_ganador_id': forzarGanadorId,
+      };
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(body),
+      );
+
+      final data = json.decode(resp.body);
+      return {
+        'status': resp.statusCode == 200 ? 'success' : 'error',
+        ...data,
+      };
+    } catch (e) {
+      return {'status': 'error', 'message': 'Error de conexión: ${e.toString()}'};
+    }
+  }
+
+  Future<void> registrarTokenPush() async {
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null) return;
+      // Llama a tu backend para asociar el token al usuario actual
+      // await http.post(Uri.parse('$baseUrl/api/notificaciones/token'), body: {'token': token});
+    } catch (_) {}
   }
 }
