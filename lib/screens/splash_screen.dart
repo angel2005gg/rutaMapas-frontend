@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import 'dart:async';
 import '../services/local_notifications_service.dart'; // ✅ IMPORTAR
 import 'tutorial/app_tutorial_flow.dart';
+import '../services/points_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -95,7 +96,9 @@ class _SplashScreenState extends State<SplashScreen>
       
       if (mounted) {
         if (result != null && result['status'] == 'success') {
-          // ✅ SESIÓN VÁLIDA
+          // ✅ Verificar racha y resetear si corresponde antes de entrar
+          unawaited(PointsService.verificarRachaYResetSiCorresponde());
+
           _updateStatus('¡Bienvenido de vuelta!');
           await Future.delayed(const Duration(milliseconds: 800));
           if (mounted) {

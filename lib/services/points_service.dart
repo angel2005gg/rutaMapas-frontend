@@ -159,13 +159,15 @@ class PointsService {
         return {'status': 'error', 'message': 'No hay sesión activa'};
       }
 
+      // Verificar y resetear si se saltó un día (según fecha local)
+      await verificarRachaYResetSiCorresponde();
+
       final ahora = DateTime.now();
       final hoy = DateTime(ahora.year, ahora.month, ahora.day);
       final hoyString = '${ahora.year}-${ahora.month.toString().padLeft(2, '0')}-${ahora.day.toString().padLeft(2, '0')}';
 
       final ultimaRacha = await _storage.read(key: 'ultima_racha_activada');
       if (ultimaRacha == hoyString) {
-        // Ya activada hoy, no sumar doble
         return {
           'status': 'info',
           'message': 'Racha ya activada hoy',
@@ -174,37 +176,18 @@ class PointsService {
       }
 
       // Calcular diferencia de días
-      int diffDias = 999;
+      int diffDias = 0;
       if (ultimaRacha != null) {
         try {
           final last = DateTime.parse(ultimaRacha);
           final lastDay = DateTime(last.year, last.month, last.day);
           diffDias = hoy.difference(lastDay).inDays;
         } catch (_) {
-          diffDias = 999;
+          diffDias = 0;
         }
       }
 
-      // Si se saltó al menos un día completo, reiniciar en backend a 0
-      if (diffDias >= 2) {
-        try {
-          await http.post(
-            Uri.parse('${ApiConfig.baseUrl}/puntaje/racha'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: json.encode({
-              'racha': 0,
-              'accion': 'reiniciar',
-            }),
-          );
-        } catch (_) {
-          // Ignorar error de reset y continuar
-        }
-      }
-
-      // Incrementar (si venía de reset => arranca en 1)
+      // Incrementar (el backend puede resetear si recibe el flag)
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/puntaje/racha'),
         headers: {
@@ -212,8 +195,9 @@ class PointsService {
           'Authorization': 'Bearer $token',
         },
         body: json.encode({
-          'racha': 1,
           'accion': 'incrementar',
+          'reiniciar_si_corresponde': diffDias >= 2,
+          'ultima_racha_local': ultimaRacha,
         }),
       );
 
@@ -224,7 +208,7 @@ class PointsService {
           'status': 'success',
           'racha_actual': data['data']['racha_actual'],
           'primera_vez_hoy': true,
-          'reiniciada': diffDias >= 2, // ✅ indica que empezó desde 0
+          'reiniciada': diffDias >= 2,
         };
       } else {
         final errorData = json.decode(response.body);
