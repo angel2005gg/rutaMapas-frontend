@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // ✅ NUEVO: Para copiar al portapapeles
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // ✅ NUEVO: Persistir comunidad actual
@@ -37,6 +38,13 @@ class _CommunityScreenState extends State<CommunityScreen> {
   // Selector de vista (enum definido a nivel superior)
   RankingView _selectedRanking = RankingView.competencia;
 
+  // ✅ NUEVO: Variables para cuenta regresiva
+  DateTime? _competenciaFechaFin; // fin de la competencia activa
+  DateTime? _serverTimeRef; // hora del servidor
+  Duration _serverDelta = Duration.zero; // delta cliente-servidor
+  String _countdownText = '';
+  Timer? _countdownTimer;
+
   void _cambiarComunidad(Map<String, dynamic> comunidad) async {
     setState(() {
       _comunidadActual = comunidad;
@@ -64,8 +72,12 @@ class _CommunityScreenState extends State<CommunityScreen> {
   void didUpdateWidget(CommunityScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     print('🏘️ CommunityScreen didUpdateWidget ejecutado');
-    // ✅ ELIMINAR TODA LA LÓGICA DE RECARGA AUTOMÁTICA
-    // Esto evitará los errores de frames y reconstrucciones innecesarias
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargarMisComunidades() async {
@@ -147,7 +159,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  // ✅ NUEVO: carga de ranking de competencia activa (sin sobrescribir comunidad)
+  // ✅ carga de ranking de competencia activa
   Future<void> _cargarRankingCompetencia() async {
     if (_comunidadActual == null) return;
     setState(() => _isLoadingRanking = true);
@@ -165,6 +177,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
       if (!mounted) return;
 
       if (res['status'] == 'success') {
+        // Parse ranking
         final List data = (res['data'] ?? []) as List;
         final ranking = data.map<Map<String, dynamic>>((e) => {
               'usuario_id': e['usuario_id'],
@@ -174,11 +187,35 @@ class _CommunityScreenState extends State<CommunityScreen> {
               'racha_actual': e['racha_actual'],
             }).toList();
 
+        // Parse meta competencia
+        final comp = res['competencia'] as Map<String, dynamic>?;
+        final serverTimeStr = res['server_time']?.toString();
+        DateTime? serverTime;
+        if (serverTimeStr != null) {
+          serverTime = DateTime.tryParse(serverTimeStr);
+        }
+        DateTime? fechaFin;
+        if (comp != null && comp['fecha_fin'] != null) {
+          fechaFin = DateTime.tryParse('${comp['fecha_fin']}');
+        }
+
+        // Actualizar estado
         setState(() {
           _rankingCompetencia = ranking;
+          _competenciaFechaFin = fechaFin;
+          _serverTimeRef = serverTime;
+          _recalcularDeltaServidor();
         });
+        _iniciarCountdownSiCorresponde();
+
+        // Si ya terminó, intentar mostrar ganador si pendiente
+        if (_competenciaFechaFin != null) {
+          final nowAdj = DateTime.now().add(_serverDelta);
+          if (!_competenciaFechaFin!.isAfter(nowAdj)) {
+            _mostrarGanadorSiPendiente(id);
+          }
+        }
       } else {
-        // mensaje informativo
         final msg = (res['message'] ?? 'No se pudo cargar el ranking').toString();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -200,6 +237,135 @@ class _CommunityScreenState extends State<CommunityScreen> {
     }
   }
 
+  void _recalcularDeltaServidor() {
+    if (_serverTimeRef == null) {
+      _serverDelta = Duration.zero;
+      return;
+    }
+    final now = DateTime.now();
+    _serverDelta = _serverTimeRef!.difference(now);
+  }
+
+  void _iniciarCountdownSiCorresponde() {
+    _countdownTimer?.cancel();
+    if (_competenciaFechaFin == null) {
+      setState(() => _countdownText = '');
+      return;
+    }
+    // Actualizar inmediatamente y luego cada 1s
+    _actualizarCountdown();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) => _actualizarCountdown());
+  }
+
+  void _actualizarCountdown() {
+    if (_competenciaFechaFin == null) return;
+    final now = DateTime.now().add(_serverDelta);
+    final remaining = _competenciaFechaFin!.difference(now);
+    if (remaining.inSeconds <= 0) {
+      _countdownTimer?.cancel();
+      setState(() => _countdownText = 'Finalizada');
+      final id = _comunidadActual?['id'] is int
+          ? _comunidadActual!['id']
+          : int.tryParse('${_comunidadActual?['id']}');
+      if (id != null) _mostrarGanadorSiPendiente(id);
+      return;
+    }
+    final days = remaining.inDays;
+    final hours = remaining.inHours % 24;
+    final minutes = remaining.inMinutes % 60;
+    // Mostrar días/horas, y si queda <1h mostrar min
+    String txt;
+    if (days > 0) {
+      txt = 'Quedan ${days}d ${hours}h';
+    } else if (hours > 0) {
+      txt = 'Quedan ${hours}h ${minutes}m';
+    } else {
+      txt = 'Quedan ${minutes}m';
+    }
+    setState(() => _countdownText = txt);
+  }
+
+  Future<void> _mostrarGanadorSiPendiente(int comunidadId) async {
+    try {
+      // Consultar historial (última competencia cerrada)
+      final res = await _comunidadService.getHistorialCompetencias(
+        comunidadId: comunidadId,
+        page: 1,
+        perPage: 1,
+      );
+      if (res['status'] != 'success') return;
+
+      // Extraer primer item
+      final d = res['data'];
+      final list = (d is Map<String, dynamic> ? (d['data'] as List?) : (res['data'] as List?)) ?? [];
+      if (list.isEmpty) return;
+      final comp = list.first as Map<String, dynamic>;
+      final compId = comp['id'] is int ? comp['id'] : int.tryParse('${comp['id']}') ?? 0;
+      final ganadorNombre = (comp['ganador_nombre'] ?? '').toString();
+      final puntajeGanador = comp['puntaje_ganador'] is int
+          ? comp['puntaje_ganador']
+          : int.tryParse('${comp['puntaje_ganador']}') ?? 0;
+
+      // Mostrar una sola vez
+      final key = 'last_winner_seen_${comunidadId}';
+      final lastSeen = await _storage.read(key: key);
+      if (lastSeen == '$compId') return; // ya mostrado
+
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) {
+          return Center(
+            child: AnimatedScale(
+              scale: 1.0,
+              duration: const Duration(milliseconds: 300),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 12, offset: const Offset(0, 6)),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.emoji_events, color: Colors.amber, size: 48),
+                    const SizedBox(height: 8),
+                    const Text('¡Tenemos ganador!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(
+                      ganadorNombre.isNotEmpty ? ganadorNombre : 'Usuario ganador',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.black87),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text('$puntajeGanador pts', style: const TextStyle(fontSize: 16, color: Colors.grey)),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
+                        child: const Text('Entendido'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+
+      // Guardar como visto
+      await _storage.write(key: key, value: '$compId');
+    } catch (_) {}
+  }
+
   // ✅ Actualizar para recibir la lista a evaluar
   Map<String, dynamic> _obtenerMiPosicion(List<Map<String, dynamic>> usuarios) {
     if (_comunidadActual == null) {
@@ -207,14 +373,12 @@ class _CommunityScreenState extends State<CommunityScreen> {
     }
     if (usuarios.isEmpty) return {'posicion': null, 'puntos': 0};
 
-    // 1) Intentar encontrar al usuario actual por la marca del backend
     Map<String, dynamic> yo = usuarios.firstWhere(
       (u) => u['es_usuario_actual'] == true || u['es_actual'] == true,
       orElse: () => {},
     );
 
     if (yo.isNotEmpty) {
-      // Si ya viene la posición desde el backend, úsala
       final pos = (yo['posicion'] is int) ? yo['posicion'] as int : null;
       final pts = (yo['puntaje'] ?? 0) is int ? yo['puntaje'] as int : 0;
 
@@ -222,7 +386,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
         return {'posicion': pos, 'puntos': pts};
       }
 
-      // Si no viene 'posicion', calcularla por orden de puntaje desc
       final ordenados = [...usuarios]..sort(
         (a, b) => (b['puntaje'] ?? 0).compareTo(a['puntaje'] ?? 0),
       );
@@ -233,15 +396,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
       };
     }
 
-    // 2) Si no hay marca del backend, usar el orden por 'posicion' si existe
     if (usuarios.isNotEmpty && usuarios.first.containsKey('posicion')) {
-      // Buscar el primer elemento marcado como actual por comparación simple:
-      // si backend no marca, devolver null (evita mostrar posición errónea)
       return {'posicion': null, 'puntos': 0};
     }
 
-    // 3) Fallback: orden por puntaje desc y no sabemos cuál es "yo"
-    // Dejar "sin clasificar" para evitar indicar una posición incorrecta.
     return {'posicion': null, 'puntos': 0};
   }
 
@@ -436,12 +594,40 @@ class _CommunityScreenState extends State<CommunityScreen> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                _comunidadActual!['nombre'] ?? 'Mi Comunidad',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _comunidadActual!['nombre'] ?? 'Mi Comunidad',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (_countdownText.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.timer, size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            _countdownText,
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
@@ -777,8 +963,11 @@ class _CommunityScreenState extends State<CommunityScreen> {
                     itemCount: rankingMiembros.length,
                     itemBuilder: (context, index) {
                       final miembro = rankingMiembros[index];
-                      final isTopThree = (miembro['posicion'] ?? 999) <= 3;
-                      return _buildRankingItem(miembro, isTopThree);
+                      final displayPos = (miembro['posicion'] is int && (miembro['posicion'] ?? 0) > 0)
+                          ? miembro['posicion'] as int
+                          : index + 1; // fallback si no viene 'posicion'
+                      final isTopThree = displayPos <= 3;
+                      return _buildRankingItem(miembro, isTopThree, displayPos);
                     },
                   )
                 else
@@ -875,7 +1064,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   // ✅ Widget para cada item del ranking (usa puntos de competencia: 'puntaje')
-  Widget _buildRankingItem(Map<String, dynamic> miembro, bool isTopThree) {
+  Widget _buildRankingItem(Map<String, dynamic> miembro, bool isTopThree, int displayPos) {
     String getAvatar(String? nombre) {
       if (nombre == null || nombre.isEmpty) return 'U';
       
@@ -887,48 +1076,58 @@ class _CommunityScreenState extends State<CommunityScreen> {
       }
     }
 
+    final bool isYo = miembro['es_usuario_actual'] == true || miembro['es_actual'] == true;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isYo ? const Color(0xFFF2F7FF) : Colors.white, // sutil azulado para mí
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!, width: 1),
-        boxShadow: isTopThree ? [
-          BoxShadow(
-            color: _getTopThreeColor(miembro['posicion'] ?? 999).withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ] : [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
+        border: Border.all(color: isYo ? const Color(0xFFBBDEFB) : Colors.grey[200]!, width: 1),
+        boxShadow: [
+          if (isTopThree)
+            BoxShadow(
+              color: _getTopThreeColor(displayPos).withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            )
+          else
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          if (isYo)
+            BoxShadow(
+              color: const Color(0xFF1565C0).withOpacity(0.12),
+              blurRadius: 10,
+              spreadRadius: 1,
+              offset: const Offset(0, 3),
+            ),
         ],
       ),
       child: Row(
         children: [
-          // Posición con medalla
+          // Posición con medalla o número
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
               color: isTopThree 
-                  ? _getTopThreeColor(miembro['posicion'] ?? 999)
+                  ? _getTopThreeColor(displayPos)
                   : Colors.grey[400],
               shape: BoxShape.circle,
             ),
             child: Center(
               child: isTopThree
                   ? Icon(
-                      _getTopThreeIcon(miembro['posicion'] ?? 999),
+                      _getTopThreeIcon(displayPos),
                       color: Colors.white,
                       size: 20,
                     )
                   : Text(
-                      '${miembro['posicion'] ?? '?'}',
+                      '$displayPos',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,

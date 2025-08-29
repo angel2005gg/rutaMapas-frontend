@@ -1,3 +1,4 @@
+// ignore_for_file: unused_import, unused_field, unused_element
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,6 +13,7 @@ import '../../widgets/map_view_toggle.dart'; // ✅ NUEVO IMPORT
 import '../../widgets/center_location_button.dart'; // ✅ NUEVO IMPORT
 // import '../../widgets/route_time_widget.dart';
 import '../../widgets/safety_warning_widget.dart';
+
 class GoogleMapWidget extends StatefulWidget {
   final Function(String)? onRutaCalculada;
 

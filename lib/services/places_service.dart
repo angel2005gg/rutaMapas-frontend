@@ -1,3 +1,4 @@
+// ignore_for_file: unused_element
 import 'dart:convert';
 import 'dart:ui' as ui; // AGREGAR
 import 'package:http/http.dart' as http;
@@ -173,10 +174,8 @@ class PlacesService {
       markerId: MarkerId('${categoria}_${lugar['place_id']}'),
       position: LatLng(lat, lng),
       icon: iconoPersonalizado,
-      // ✅ SIN InfoWindow porque ya está en la burbuja
       onTap: () {
-        print('📍 Tapped: $nombre');
-        // Aquí puedes agregar lógica adicional si necesitas
+        debugPrint('📍 Tapped: $nombre');
       },
     );
   }

@@ -9,9 +9,9 @@ class PointsService {
 
   // ✅ SUMAR PUNTOS al iniciar ruta
   static Future<Map<String, dynamic>> darPuntosInicioRuta() async {
-    final res = await _actualizarPuntos(5, 'Ruta iniciada');
+    final res = await _actualizarPuntos(1, 'Ruta iniciada');
     // Enviar a TODAS las comunidades con competencia activa (sin duplicar)
-    await _aplicarPuntosTodasComunidades(5, 'Ruta iniciada');
+    await _aplicarPuntosTodasComunidades(1, 'Ruta iniciada');
     return res;
   }
 

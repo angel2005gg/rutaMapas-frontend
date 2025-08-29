@@ -121,20 +121,31 @@ class _HistorialCompetenciasScreenState extends State<HistorialCompetenciasScree
                     );
                   }
                   final c = _items[index];
+                  final tieneGanador = (c.ganadorUsuarioId != null) || (c.ganadorNombre != null && c.ganadorNombre!.isNotEmpty);
                   return Card(
                     elevation: 2,
                     child: ListTile(
                       leading: Icon(
                         Icons.emoji_events,
-                        color: c.ganadorUsuarioId != null ? Colors.amber : Colors.grey,
+                        color: tieneGanador ? Colors.amber : Colors.grey,
                       ),
                       title: Text('Duración: ${c.duracionDias} días • ${c.estado.toUpperCase()}'),
-                      subtitle: Text(
-                        '${c.fechaInicio?.toLocal().toString().substring(0, 16) ?? '-'}  →  ${c.fechaFin?.toLocal().toString().substring(0, 16) ?? '-'}',
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${c.fechaInicio?.toLocal().toString().substring(0, 16) ?? '-'}  →  ${c.fechaFin?.toLocal().toString().substring(0, 16) ?? '-'}',
+                          ),
+                          const SizedBox(height: 4),
+                          if (tieneGanador)
+                            Text(
+                              'Ganador: ${c.ganadorNombre ?? 'Usuario #${c.ganadorUsuarioId}'} • ${c.puntajeGanador ?? 0} pts',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            )
+                          else
+                            const Text('Sin ganador', style: TextStyle(color: Colors.grey)),
+                        ],
                       ),
-                      trailing: c.ganadorUsuarioId != null
-                          ? const Text('Con ganador', style: TextStyle(fontWeight: FontWeight.w600))
-                          : const Text('Sin ganador', style: TextStyle(color: Colors.grey)),
                     ),
                   );
                 },

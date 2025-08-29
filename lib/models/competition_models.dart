@@ -7,6 +7,8 @@ class Competition {
   final String estado; // activo / cerrado
   final int? creadaPor;
   final int? ganadorUsuarioId;
+  final String? ganadorNombre;
+  final int? puntajeGanador;
 
   Competition({
     required this.id,
@@ -17,6 +19,8 @@ class Competition {
     required this.estado,
     this.creadaPor,
     this.ganadorUsuarioId,
+    this.ganadorNombre,
+    this.puntajeGanador,
   });
 
   factory Competition.fromJson(Map<String, dynamic> json) {
@@ -45,6 +49,10 @@ class Competition {
           : (json['ganador_usuario_id'] is int
               ? json['ganador_usuario_id']
               : int.tryParse('${json['ganador_usuario_id']}')),
+      ganadorNombre: json['ganador_nombre']?.toString(),
+      puntajeGanador: json['puntaje_ganador'] is int
+          ? json['puntaje_ganador']
+          : int.tryParse('${json['puntaje_ganador']}'),
     );
   }
 }

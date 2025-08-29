@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/comunidad_service.dart';
 
@@ -20,16 +21,120 @@ class _AjustesCompetenciaScreenState extends State<AjustesCompetenciaScreen> {
   final ComunidadService _service = ComunidadService();
   bool _isSaving = false;
 
+  // Estado para mostrar info de competencia actual
+  bool _cargandoInfo = false;
+  int _rankingDuracionDias = 7;
+  DateTime? _fechaInicio;
+  DateTime? _fechaFin;
+  DateTime? _serverTimeRef;
+  Duration _serverDelta = Duration.zero;
+  String _countdownText = '';
+  Timer? _countdownTimer;
+
   @override
   void initState() {
     super.initState();
     _diasController.text = widget.duracionInicial.toString();
+    _rankingDuracionDias = widget.duracionInicial;
+    _cargarInfoCompetencia();
   }
 
   @override
   void dispose() {
     _diasController.dispose();
+    _countdownTimer?.cancel();
     super.dispose();
+  }
+
+  // Utilidad simple para formatear fecha
+  String _fmt(DateTime d) {
+    final dd = d.day.toString().padLeft(2, '0');
+    final mm = d.month.toString().padLeft(2, '0');
+    final yyyy = d.year.toString();
+    final hh = d.hour.toString().padLeft(2, '0');
+    final min = d.minute.toString().padLeft(2, '0');
+    return '$dd/$mm/$yyyy $hh:$min';
+  }
+
+  Future<void> _cargarInfoCompetencia() async {
+    setState(() => _cargandoInfo = true);
+    try {
+      final res = await _service.getRankingActual(
+        comunidadId: widget.comunidadId,
+        duracionDias: _rankingDuracionDias,
+      );
+      if (!mounted) return;
+      if (res['status'] == 'success') {
+        final comp = res['competencia'] as Map<String, dynamic>?;
+        final serverTimeStr = res['server_time']?.toString();
+        DateTime? serverTime;
+        if (serverTimeStr != null) serverTime = DateTime.tryParse(serverTimeStr);
+
+        DateTime? inicio;
+        DateTime? fin;
+        if (comp != null) {
+          if (comp['fecha_inicio'] != null) {
+            inicio = DateTime.tryParse('${comp['fecha_inicio']}');
+          }
+          if (comp['fecha_fin'] != null) {
+            fin = DateTime.tryParse('${comp['fecha_fin']}');
+          }
+        }
+        setState(() {
+          _fechaInicio = inicio;
+          _fechaFin = fin;
+          _serverTimeRef = serverTime;
+          _recalcularDeltaServidor();
+        });
+        _iniciarCountdown();
+      }
+    } catch (_) {
+      // Silencioso: no bloquear ajustes
+    } finally {
+      if (mounted) setState(() => _cargandoInfo = false);
+    }
+  }
+
+  void _recalcularDeltaServidor() {
+    if (_serverTimeRef == null) {
+      _serverDelta = Duration.zero;
+      return;
+    }
+    final now = DateTime.now();
+    _serverDelta = _serverTimeRef!.difference(now);
+  }
+
+  void _iniciarCountdown() {
+    _countdownTimer?.cancel();
+    if (_fechaFin == null) {
+      setState(() => _countdownText = '');
+      return;
+    }
+    _actualizarCountdown();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) => _actualizarCountdown());
+  }
+
+  void _actualizarCountdown() {
+    if (_fechaFin == null) return;
+    final now = DateTime.now().add(_serverDelta);
+    final remaining = _fechaFin!.difference(now);
+    if (remaining.inSeconds <= 0) {
+      _countdownTimer?.cancel();
+      setState(() => _countdownText = 'Finalizada');
+      return;
+    }
+    final d = remaining.inDays;
+    final h = remaining.inHours % 24;
+    final m = remaining.inMinutes % 60;
+    String txt;
+    if (d > 0) {
+      txt = 'Quedan ${d}d ${h}h';
+    } else if (h > 0) {
+      txt = 'Quedan ${h}h ${m}m';
+    } else {
+      txt = 'Quedan ${m}m';
+    }
+    setState(() => _countdownText = txt);
   }
 
   bool _shouldFallbackToConfigurar(Map<String, dynamic> res) {
@@ -118,14 +223,110 @@ class _AjustesCompetenciaScreenState extends State<AjustesCompetenciaScreen> {
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
       ),
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          ),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Tarjeta de información de competencia actual
+                Card(
+                  elevation: 3,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: _cargandoInfo
+                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF1565C0)))
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Encabezado: icono + título
+                              Row(
+                                children: [
+                                  const Icon(Icons.flag_circle, color: Color(0xFF1565C0)),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      'Competencia actual',
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              // Burbuja del contador: ícono + texto juntos en un solo contenedor
+                              if (_countdownText.isNotEmpty)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1565C0).withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: const Color(0xFF1565C0).withOpacity(0.2)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.timer, size: 14, color: Color(0xFF1565C0)),
+                                        const SizedBox(width: 4),
+                                        Flexible(
+                                          child: Text(
+                                            _countdownText,
+                                            style: const TextStyle(
+                                              color: Color(0xFF1565C0),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            softWrap: true,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(height: 12),
+                              if (_fechaInicio != null)
+                                Row(
+                                  children: [
+                                    const Icon(Icons.calendar_today, size: 16, color: Colors.black54),
+                                    const SizedBox(width: 8),
+                                    Text('Inicio: ${_fmt(_fechaInicio!.toLocal())}'),
+                                  ],
+                                )
+                              else
+                                const Text('No hay competencia activa ahora mismo'),
+                              const SizedBox(height: 6),
+                              if (_fechaFin != null)
+                                Row(
+                                  children: [
+                                    const Icon(Icons.event, size: 16, color: Colors.black54),
+                                    const SizedBox(width: 8),
+                                    Text('Finaliza: ${_fmt(_fechaFin!.toLocal())}'),
+                                  ],
+                                ),
+                              if (_fechaFin != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    'La competencia acaba el ${_fmt(_fechaFin!.toLocal())}. Revisa al ganador en el historial.',
+                                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                  ),
+                                ),
+                            ],
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
                 const Text(
                   'Duración (días)',
                   style: TextStyle(fontWeight: FontWeight.w600),

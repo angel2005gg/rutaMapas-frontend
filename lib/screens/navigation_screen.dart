@@ -865,11 +865,11 @@ class _NavigationScreenState extends State<NavigationScreen>
       setState(() {
         _puntosInicioOtorgados = true;
         _mostrandoAnimacionPuntos = true;
-        _puntosAnimacion = 5;
+        _puntosAnimacion = 1; // antes 5
         _puntosPositivos = true;
         _motivoPuntos = 'Ruta iniciada';
         _pointEvents.add(RoutePointEvent(
-          puntos: 5,
+          puntos: 1, // antes 5
           motivo: 'Ruta iniciada',
           timestamp: DateTime.now(),
         ));
